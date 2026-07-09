@@ -8,7 +8,7 @@ All notable changes to the **GemStone Smalltalk** extension will be documented i
 
 ### Added
 
-- **Rowan package management (work in progress).** A new **Rowan** view lists tracked git repositories and the Rowan projects within them, and manages loading them into the image. Add a repository from a git URL (checked out into your workspace folder) and load/unload its projects; loads run non-blocking over a shared transient SystemUser session (Rowan loads require SystemUser). Git-backed repos get an inline **Update** that pulls with submodules and refreshes the row. A project can declare the gem cache it needs in a GemStone-native `rowan/gemstone.ston`; when the connected gem's cache falls short, Jasper flags the repo with a warning triangle and offers the fix before loading. Also adds **GemStone: Serve Seaside** / **GemStone: Stop Seaside Server** commands, which run a detached serving gem and open the app in the integrated browser. ([#144](https://github.com/jgfoster/Jasper/pull/144))
+- **Rowan package management (work in progress).** A new **Rowan** view lists tracked git repositories and the Rowan projects within them, and manages loading them into the image. Add a repository from a git URL (checked out into your workspace folder) and load/unload its projects; loads run non-blocking over a shared transient SystemUser session (Rowan loads require SystemUser). Git-backed repos get an inline **Update** that pulls with submodules and refreshes the row. A project can declare the gem cache it needs in a GemStone-native `rowan/gemstone.ston`; when the connected gem's cache falls short, Jasper flags the repo with a warning triangle and offers the fix before loading. ([#144](https://github.com/jgfoster/Jasper/pull/144))
 
 ### Changed
 

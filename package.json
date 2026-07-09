@@ -1023,18 +1023,6 @@
         "title": "Open MCP Inspector",
         "category": "GemStone",
         "icon": "$(open-preview)"
-      },
-      {
-        "command": "gemstone.serveSeaside",
-        "title": "Serve Seaside",
-        "category": "GemStone",
-        "icon": "$(globe)"
-      },
-      {
-        "command": "gemstone.stopSeaside",
-        "title": "Stop Seaside Server",
-        "category": "GemStone",
-        "icon": "$(circle-slash)"
       }
     ],
     "menus": {
@@ -1086,14 +1074,6 @@
         {
           "command": "gemstone.installEnhancedInspector",
           "when": "gemstone.hasActiveSession && gemstone.enhancedInspectorSupported"
-        },
-        {
-          "command": "gemstone.serveSeaside",
-          "when": "gemstone.hasActiveSession"
-        },
-        {
-          "command": "gemstone.stopSeaside",
-          "when": "gemstone.hasActiveSession"
         }
       ],
       "view/title": [
@@ -1513,7 +1493,6 @@
     "bundle": "node esbuild.mjs",
     "watch": "tsc -b -w client/tsconfig.json server/tsconfig.json",
     "dev:fresh": "bash scripts/dev-fresh.sh",
-    "serve:seaside": "bash scripts/serve-seaside.sh",
     "test": "npm run test:server && npm run test:client && npm run test:mcp",
     "test:server:start": "npm run test:server:start --workspace client",
     "test:server:stop": "npm run test:server:stop --workspace client",
@@ -1528,7 +1507,6 @@
     "test:acceptance:report": "playwright show-report acceptance/playwright-report",
     "test:acceptance:docker": "bash acceptance/docker-test.sh",
     "test:acceptance:rowan": "bash acceptance/docker-test-rowan.sh",
-    "test:acceptance:seaside": "bash acceptance/docker-test-seaside.sh",
     "package": "vsce package",
     "publish": "npm run publish:vsce && npm run publish:ovsx",
     "publish:vsce": "vsce publish",
