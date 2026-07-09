@@ -761,16 +761,6 @@
         "category": "GemStone"
       },
       {
-        "command": "gemstone.loadRowanProject",
-        "title": "Load Rowan Project…",
-        "category": "GemStone"
-      },
-      {
-        "command": "gemstone.loadRowanProjectFromGit",
-        "title": "Load Rowan Project from Git…",
-        "category": "GemStone"
-      },
-      {
         "command": "gemstone.unloadRowanProject",
         "title": "Unload Rowan Project…",
         "category": "GemStone"

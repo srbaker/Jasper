@@ -1276,52 +1276,6 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('gemstone.loadRowanProject', async () => {
-      const session = await sessionManager.resolveSession();
-      if (!session) return;
-
-      const folder = await vscode.window.showOpenDialog({
-        canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
-        openLabel: 'Load Project', title: 'Select a Rowan project directory to load',
-      });
-      if (!folder || folder.length === 0) return;
-
-      await loadRowanFromDirectory(session, folder[0].fsPath, sessionManager);
-      void vscode.commands.executeCommand('gemstone.rowanRefreshView');
-    }),
-
-    vscode.commands.registerCommand('gemstone.loadRowanProjectFromGit', async () => {
-      const session = await sessionManager.resolveSession();
-      if (!session) return;
-
-      const raw = (await vscode.window.showInputBox({
-        prompt: 'Git repository URL of the Rowan project',
-        placeHolder: 'https://github.com/owner/repo.git',
-        ignoreFocusOut: true,
-        validateInput: validateRowanGitUrl,
-      }))?.trim();
-      if (!raw) return;
-      const url = normalizeGitUrl(raw);
-
-      // Clone into the open workspace folder.
-      const dest = rowanWorkspaceDest(deriveRepoName(url));
-      if (!dest) return;
-      if (!fs.existsSync(dest)) {
-        try {
-          await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: `Cloning ${url}…`, cancellable: false },
-            () => cloneGitRepo(url, dest),
-          );
-        } catch (e: unknown) {
-          vscode.window.showErrorMessage(`git clone failed: ${e instanceof Error ? e.message : String(e)}`);
-          return;
-        }
-      }
-
-      await loadRowanFromDirectory(session, dest, sessionManager);
-      void vscode.commands.executeCommand('gemstone.rowanRefreshView');
-    }),
-
     vscode.commands.registerCommand('gemstone.unloadRowanProject', async (nameArg?: string | RowanLoadedProjectItem) => {
       const session = await sessionManager.resolveSession();
       if (!session) return;
