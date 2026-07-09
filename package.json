@@ -728,12 +728,6 @@
         "icon": "$(play)"
       },
       {
-        "command": "gemstone.rowanUpdateRepo",
-        "title": "Update from Git",
-        "category": "GemStone",
-        "icon": "$(sync)"
-      },
-      {
         "command": "gemstone.rowanExportProject",
         "title": "Export Copy…",
         "category": "GemStone"
@@ -1026,10 +1020,6 @@
           "when": "false"
         },
         {
-          "command": "gemstone.rowanUpdateRepo",
-          "when": "false"
-        },
-        {
           "command": "gemstone.rowanOpenProjectDiff",
           "when": "false"
         },
@@ -1119,11 +1109,6 @@
         }
       ],
       "view/item/context": [
-        {
-          "command": "gemstone.rowanUpdateRepo",
-          "when": "view == gemstoneRowan && viewItem =~ /^rowanRepo.*Git$/",
-          "group": "inline@0"
-        },
         {
           "command": "gemstone.rowanLoadRepo",
           "when": "view == gemstoneRowan && (viewItem == rowanRepo || viewItem == rowanRepoGit)",
