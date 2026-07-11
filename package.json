@@ -953,6 +953,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "gemstone.openManager",
+        "title": "GemStone Manager",
+        "category": "GemStone Admin",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "gemstone.deleteDatabase",
         "title": "Delete Database",
         "category": "GemStone Admin",
@@ -1146,6 +1152,21 @@
           "command": "gemstone.refreshProcesses",
           "when": "view == gemstoneProcesses",
           "group": "navigation"
+        },
+        {
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneSharedMemory",
+          "group": "navigation@0"
+        },
+        {
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneVersions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneDatabases",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [

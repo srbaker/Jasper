@@ -74,6 +74,7 @@ import { VersionTreeProvider, VersionItem } from './versionTreeProvider';
 import { DatabaseManager } from './databaseManager';
 import { DatabaseTreeProvider, DatabaseNode } from './databaseTreeProvider';
 import { ProcessManager } from './processManager';
+import { GemstoneManagerPanel } from './gemstoneManager';
 import { openMcpInspector } from './openMcpInspector';
 import { McpSocketServer, writeClaudeDesktopMcpConfig } from './mcpSocketServer';
 import { writeClaudeCodeUserMcpConfig } from './claudeCodeUserMcpConfig';
@@ -2702,6 +2703,10 @@ export function activate(context: vscode.ExtensionContext) {
         refreshAdminViews();
         vscode.window.showInformationMessage(`Database "${db.dirName}" created.`);
       }
+    }),
+
+    vscode.commands.registerCommand('gemstone.openManager', () => {
+      GemstoneManagerPanel.show({ storage: sysadminStorage, versionManager, processManager });
     }),
 
     vscode.commands.registerCommand('gemstone.deleteDatabase', async (node: DatabaseNode) => {

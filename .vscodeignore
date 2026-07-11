@@ -46,6 +46,7 @@ client/src/**
 !client/src/debuggerView.js
 !client/src/enhancedInspectorColumns.js
 !client/src/browserColumnResize.js
+!client/src/gemstoneManager.js
 server/src/**
 mcp-server/src/**
 
