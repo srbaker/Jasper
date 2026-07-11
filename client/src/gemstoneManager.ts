@@ -128,8 +128,7 @@ type Inbound =
   | { command: 'openDbInFinder'; dirName: string }
   | { command: 'openDbSubfolder'; dirName: string; folder: string }
   | { command: 'createLoginFromDb'; dirName: string }
-  | { command: 'quickSetup' }
-  | { command: 'configureOs' };
+  | { command: 'quickSetup' };
 
 export class GemstoneManagerPanel {
   static readonly viewType = 'gemstoneManager';
@@ -268,9 +267,6 @@ export class GemstoneManagerPanel {
       case 'quickSetup':
         await vscode.commands.executeCommand('gemstone.quickSetup');
         await this.postState();
-        return;
-      case 'configureOs':
-        await vscode.commands.executeCommand('gemstoneSharedMemory.focus');
         return;
     }
   }

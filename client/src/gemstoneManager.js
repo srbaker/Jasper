@@ -115,7 +115,6 @@
         <span class="count-badge">${esc(os.platformLabel)}</span>
         <span class="section-head-actions">
           ${btn('quickSetup', 'Run Quick Setup', 'gear', 'btn-secondary')}
-          ${btn('configureOs', 'Details', null, 'btn-ghost')}
         </span>
       </summary>
       <div class="section-body">

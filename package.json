@@ -312,38 +312,6 @@
     "views": {
       "gemstone": [
         {
-          "id": "gemstoneSharedMemory",
-          "name": "Configure OS",
-          "type": "tree",
-          "icon": "$(memory)",
-          "when": "isMac || isLinux || gemstone.isWindows",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "gemstoneVersions",
-          "name": "Versions",
-          "type": "tree",
-          "icon": "$(versions)"
-        },
-        {
-          "id": "gemstoneDatabases",
-          "name": "Databases",
-          "type": "tree",
-          "icon": "$(database)"
-        },
-        {
-          "id": "gemstoneProcesses",
-          "name": "Processes",
-          "type": "tree",
-          "icon": "$(server-process)"
-        },
-        {
-          "id": "gemstoneLogins",
-          "name": "Logins & Sessions",
-          "type": "tree",
-          "icon": "$(key)"
-        },
-        {
           "id": "gemstoneRowan",
           "name": "Rowan",
           "type": "tree",
@@ -366,10 +334,6 @@
     },
     "viewsWelcome": [
       {
-        "view": "gemstoneLogins",
-        "contents": "New to GemStone? Start with the guided walkthrough.\n[Get Started with GemStone](command:gemstone.openWalkthrough)\nOr learn the language in the interactive tutorial notebook.\n[Open Tutorial Notebook](command:gemstone.openTutorial)\nOr jump straight into a scratch workspace.\n[Open Getting Started Workspace](command:gemstone.openWorkspace)\nThen add a login to connect to a stone.\n[Add a Login](command:gemstone.login)"
-      },
-      {
         "view": "gemstoneRowan",
         "contents": "Not connected."
       },
@@ -382,30 +346,6 @@
         "view": "gemstoneInspector",
         "contents": "No objects inspected yet.\nSelect code and press Ctrl+K I to inspect.",
         "when": "!isMac"
-      },
-      {
-        "view": "gemstoneVersions",
-        "contents": "Loading versions...\n[Refresh](command:gemstone.refreshVersions)"
-      },
-      {
-        "view": "gemstoneDatabases",
-        "contents": "GemStone system administration requires Windows Subsystem for Linux (WSL2).\n[Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install)",
-        "when": "gemstone.isWindows && !gemstone.wslAvailable"
-      },
-      {
-        "view": "gemstoneDatabases",
-        "contents": "No databases found.\n[Create Database](command:gemstone.createDatabase)",
-        "when": "!gemstone.isWindows || gemstone.wslAvailable"
-      },
-      {
-        "view": "gemstoneProcesses",
-        "contents": "GemStone system administration requires Windows Subsystem for Linux (WSL2).\n[Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install)",
-        "when": "gemstone.isWindows && !gemstone.wslAvailable"
-      },
-      {
-        "view": "gemstoneProcesses",
-        "contents": "No running GemStone processes.\n[Refresh](command:gemstone.refreshProcesses)",
-        "when": "!gemstone.isWindows || gemstone.wslAvailable"
       }
     ],
     "walkthroughs": [
@@ -1104,8 +1044,8 @@
       ],
       "view/title": [
         {
-          "command": "gemstone.openWalkthrough",
-          "when": "view == gemstoneVersions",
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneRowan",
           "group": "navigation@0"
         },
         {
@@ -1119,54 +1059,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "gemstone.addLogin",
-          "when": "view == gemstoneLogins",
-          "group": "navigation@1"
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneMcpServer",
+          "group": "navigation@0"
+        },
+        {
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneInspector",
+          "group": "navigation@0"
         },
         {
           "command": "gemstone.clearInspector",
           "when": "view == gemstoneInspector",
-          "group": "navigation"
-        },
-        {
-          "command": "gemstone.registerLocalVersion",
-          "when": "view == gemstoneVersions && (!gemstone.isWindows || gemstone.wslAvailable)",
-          "group": "navigation@2"
-        },
-        {
-          "command": "gemstone.refreshVersions",
-          "when": "view == gemstoneVersions",
-          "group": "navigation@3"
-        },
-        {
-          "command": "gemstone.createDatabase",
-          "when": "view == gemstoneDatabases",
           "group": "navigation@1"
-        },
-        {
-          "command": "gemstone.refreshDatabases",
-          "when": "view == gemstoneDatabases",
-          "group": "navigation@2"
-        },
-        {
-          "command": "gemstone.refreshProcesses",
-          "when": "view == gemstoneProcesses",
-          "group": "navigation"
-        },
-        {
-          "command": "gemstone.openManager",
-          "when": "view == gemstoneSharedMemory",
-          "group": "navigation@0"
-        },
-        {
-          "command": "gemstone.openManager",
-          "when": "view == gemstoneVersions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "gemstone.openManager",
-          "when": "view == gemstoneDatabases",
-          "group": "navigation@0"
         }
       ],
       "view/item/context": [

@@ -469,12 +469,10 @@ export function activate(context: vscode.ExtensionContext) {
   // login row (and swap its inline Login action for Logout) in single-session mode.
   sessionManager = new SessionManager();
   const treeProvider = new LoginTreeProvider(storage, sessionManager);
-
-  const treeView = vscode.window.createTreeView('gemstoneLogins', {
-    treeDataProvider: treeProvider,
-    showCollapseAll: false,
-  });
-  context.subscriptions.push(treeView);
+  // The "Logins & Sessions" sidebar tree was removed; login/session management
+  // now lives in the GemStone Manager (and a forthcoming launch-style login
+  // selector). treeProvider is retained because the login editor and many
+  // commands still drive it (its refresh() is a no-op without a view).
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -2292,38 +2290,22 @@ export function activate(context: vscode.ExtensionContext) {
   // OS Configuration (macOS, Linux, and Windows)
   if (process.platform === 'darwin' || process.platform === 'linux' || isWindows()) {
     const osConfigProvider = new OsConfigTreeProvider();
-    context.subscriptions.push(
-      vscode.window.createTreeView('gemstoneSharedMemory', {
-        treeDataProvider: osConfigProvider,
-      })
-    );
+    // OS Config, Versions, Databases, and Processes trees were removed from the
+    // sidebar in favor of the GemStone Manager panel. The providers below are
+    // kept because commands (and the Manager) still drive them; their refresh()
+    // calls are harmless no-ops without an attached view. osConfigProvider is
+    // retained for its remediation commands.
     osConfigProvider.registerCommands(context);
   }
 
   // Versions
   const versionProvider = new VersionTreeProvider(versionManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneVersions', {
-      treeDataProvider: versionProvider,
-    })
-  );
 
   // Databases
   const databaseProvider = new DatabaseTreeProvider(sysadminStorage, processManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneDatabases', {
-      treeDataProvider: databaseProvider,
-      showCollapseAll: true,
-    })
-  );
 
   // Processes
   const processProvider = new ProcessTreeProvider(processManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneProcesses', {
-      treeDataProvider: processProvider,
-    })
-  );
 
   // Rowan: tracked repositories (registry persists in globalState — stones are
   // disposable, the registry isn't) + package-manager operations.
