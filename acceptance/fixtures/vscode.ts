@@ -46,12 +46,7 @@ export const VSCODE_VERSION = '1.128.0';
  * developer's shell env is dropped so nothing machine-specific leaks in. HOME,
  * TMPDIR, and the XDG_* dirs are then overridden to throwaway locations.
  */
-const ENV_ALLOWLIST = [
-  'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', '__CF_USER_TEXT_ENCODING',
-  // Display vars so the editor finds the X server under Xvfb in the container.
-  // Unset (and harmless) on macOS; required for the headless Linux/Docker run.
-  'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'WAYLAND_DISPLAY',
-];
+const ENV_ALLOWLIST = ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', '__CF_USER_TEXT_ENCODING'];
 
 export interface LaunchedVSCode {
   app: ElectronApplication;
