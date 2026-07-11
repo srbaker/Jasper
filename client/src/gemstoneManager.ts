@@ -454,6 +454,8 @@ body {
 }
 .section[open] > summary::before { transform: rotate(90deg); }
 .section-title { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.head-warn { display: inline-flex; color: var(--gm-warn); margin-left: -2px; }
+.head-warn svg { width: 14px; height: 14px; }
 .section-icon { display: inline-flex; opacity: .8; }
 .section-icon svg { width: 15px; height: 15px; }
 .count-badge {

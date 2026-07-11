@@ -74,9 +74,19 @@
   }
 
   // ── OS section ──────────────────────────────────────────────────────────────
-  function renderOs(os) {
+  // An OS "warning" is anything the user may need to fix: shared memory below
+  // the 1 GB threshold, or state that couldn't be read at all.
+  function osHasWarning(os) {
+    return !!os.supported && (os.unknown || !os.sharedMemoryConfigured);
+  }
+
+  function openAttr(open) {
+    return open ? ' open' : '';
+  }
+
+  function renderOs(os, open) {
     if (!os.supported) {
-      return `<details class="section" open>
+      return `<details class="section"${openAttr(open)}>
         <summary><span class="section-icon">${ICONS.memory}</span><span class="section-title">Operating System</span></summary>
         <div class="section-body"><div class="note">${ICONS.warn}<span>OS prerequisites are not surfaced on this platform.</span></div></div>
       </details>`;
@@ -94,10 +104,11 @@
            <div><span>shmmax</span><span>${esc(formatBytes(os.shmmaxBytes))}</span></div>
            <div><span>shmall</span><span>${os.shmallBytes ? esc(formatBytes(os.shmallBytes * 4096)) : '—'}</span></div>
          </div>`;
-    return `<details class="section" open>
+    const warnMark = osHasWarning(os) ? `<span class="head-warn" title="Needs attention">${ICONS.warn}</span>` : '';
+    return `<details class="section"${openAttr(open)}>
       <summary>
         <span class="section-icon">${ICONS.memory}</span>
-        <span class="section-title">Operating System</span>
+        <span class="section-title">Operating System</span>${warnMark}
         <span class="count-badge">${esc(os.platformLabel)}</span>
         <span class="section-head-actions">
           ${btn('quickSetup', 'Run Quick Setup', 'gear', 'btn-secondary')}
@@ -156,7 +167,11 @@
     return `<span class="pill pill-${state}">${labels[state]}</span>`;
   }
 
-  function renderVersions(versions) {
+  function versionsInstalledCount(versions) {
+    return versions.filter((v) => v.extracted || v.local).length;
+  }
+
+  function renderVersions(versions, open) {
     const rows = versions.length
       ? versions
           .map((v) => {
@@ -175,8 +190,8 @@
           })
           .join('')
       : `<div class="empty">No GemStone versions found. Download one or register a local build.</div>`;
-    const installed = versions.filter((v) => v.extracted || v.local).length;
-    return `<details class="section" open>
+    const installed = versionsInstalledCount(versions);
+    return `<details class="section"${openAttr(open)}>
       <summary>
         <span class="section-icon">${ICONS.versions}</span>
         <span class="section-title">Versions</span>
@@ -211,7 +226,7 @@
     );
   }
 
-  function renderDatabases(databases) {
+  function renderDatabases(databases, open) {
     const rows = databases.length
       ? databases
           .map((db) => {
@@ -226,7 +241,7 @@
           })
           .join('')
       : `<div class="empty">No databases yet.${' '}<div>${btn('createDatabase', 'New Database…', 'plus', 'btn-primary')}</div></div>`;
-    return `<details class="section" open>
+    return `<details class="section"${openAttr(open)}>
       <summary>
         <span class="section-icon">${ICONS.database}</span>
         <span class="section-title">Databases</span>
@@ -237,9 +252,27 @@
     </details>`;
   }
 
+  // Sections reorder by urgency. Lower weight sorts higher on the page.
+  //   OS:        warning → top (-100, expanded);  ok → bottom (+100, collapsed)
+  //   Versions:  none installed → above databases (-10);  installed → below (+10)
+  //   Databases: the anchor (0)
+  function orderedSections(state) {
+    const osWarn = osHasWarning(state.os);
+    const hasVersions = versionsInstalledCount(state.versions) > 0;
+    const sections = [
+      { weight: osWarn ? -100 : 100, html: renderOs(state.os, osWarn) },
+      { weight: hasVersions ? 10 : -10, html: renderVersions(state.versions, true) },
+      { weight: 0, html: renderDatabases(state.databases, true) },
+    ];
+    sections.sort((a, b) => a.weight - b.weight);
+    return sections;
+  }
+
   function render(state) {
     els.rootPath.textContent = state.rootPath || '';
-    els.root.innerHTML = renderOs(state.os) + renderVersions(state.versions) + renderDatabases(state.databases);
+    els.root.innerHTML = orderedSections(state)
+      .map((s) => s.html)
+      .join('');
   }
 
   function post(msg) {
@@ -277,6 +310,8 @@
     renderOs,
     renderVersions,
     renderDatabases,
+    orderedSections,
+    osHasWarning,
     versionState,
     formatBytes,
   };
