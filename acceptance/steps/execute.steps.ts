@@ -1,7 +1,11 @@
 /**
  * Steps for features/execute.feature. `@stone` provisions a stone and seeds the
  * login; the Given logs in to get a live session, then we open a workspace and
- * Display It.
+ * Display It. Commands go through the palette with their full "GemStone:" names
+ * so they don't collide with VS Code built-ins. The stone fixture runs Display It
+ * in "insert" mode, so its result is inserted as real document text after the
+ * expression — readable, unlike the default overlay (a CSS pseudo-element) — and
+ * polling the editor text also waits out the async on-stone evaluation.
  */
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
@@ -21,16 +25,20 @@ Given('I am logged in to the test stone', async ({ window, screen }) => {
 });
 
 When('I Display It on {string} in a workspace', async ({ window, screen }, code: string) => {
-  await runCommand(window, 'Open Workspace');
+  await runCommand(window, 'GemStone: Open Workspace');
   const editor = window.locator('.part.editor .monaco-editor').first();
+  await expect(editor).toBeVisible({ timeout: 30_000 });
   await editor.click();
   await window.keyboard.type(code);
-  await window.keyboard.press('Meta+a'); // select the expression
+  await window.keyboard.press('ControlOrMeta+a'); // select the expression (Ctrl on Linux, Cmd on macOS)
   await screen('An expression in a workspace');
-  await runCommand(window, 'Display It');
+  await runCommand(window, 'GemStone: Display It');
 });
 
 Then('the value {string} is shown', async ({ window, screen }, value: string) => {
-  await expect(window.getByText(new RegExp(`⇒\\s*${value}`))).toBeVisible({ timeout: 30_000 });
-  await screen('The result, shown inline');
+  // In insert mode Display It writes its result into the document, so it shows up
+  // as editor text once the on-stone evaluation returns; poll until it lands.
+  const editor = window.locator('.part.editor .monaco-editor').first();
+  await expect(editor).toContainText(value, { timeout: 30_000 });
+  await screen('The result, inserted after the expression');
 });

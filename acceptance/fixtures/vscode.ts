@@ -85,6 +85,15 @@ export interface LaunchOptions {
    * cache so a release is fetched once and reused by later runs.
    */
   gemstoneRootPath?: string;
+  /**
+   * When true, launch VS Code with **no folder open** (an empty window). Jasper
+   * requires an open folder to log in, and the "open a folder first" chapter
+   * captures that guidance. With no folder there is no workspace `settings.json`,
+   * so `workspaceSettings` (and `gemstone.rootPath`) are applied at user scope
+   * instead — enough to show a configured login whose Login action then trips the
+   * folder guard.
+   */
+  noWorkspace?: boolean;
 }
 
 /**
@@ -135,14 +144,22 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
     'telemetry.telemetryLevel': 'off',
     ...options.workspaceSettings,
   };
-  const dotVscode = path.join(workspace, '.vscode');
-  fs.mkdirSync(dotVscode, { recursive: true });
-  fs.writeFileSync(path.join(dotVscode, 'settings.json'), JSON.stringify(settings, null, 2));
+  const noWorkspace = options.noWorkspace ?? false;
+  if (!noWorkspace) {
+    const dotVscode = path.join(workspace, '.vscode');
+    fs.mkdirSync(dotVscode, { recursive: true });
+    fs.writeFileSync(path.join(dotVscode, 'settings.json'), JSON.stringify(settings, null, 2));
+  }
 
   // Application-scoped user settings live in the user-data dir. Disable extension
   // signature verification: it otherwise hangs the marketplace *UI* install in
   // this isolated build (the CLI `--install-extension` path doesn't enforce it).
-  const userSettings: Record<string, unknown> = { 'extensions.verifySignature': false };
+  // With no folder open there is no workspace settings.json, so the scenario's
+  // settings (the configured login, gemstone.rootPath) are applied here instead.
+  const userSettings: Record<string, unknown> = {
+    'extensions.verifySignature': false,
+    ...(noWorkspace ? settings : {}),
+  };
   if (options.workspaceTrust) {
     // Force the Workspace Trust startup prompt so the dialog can be captured.
     userSettings['security.workspace.trust.enabled'] = true;
@@ -175,7 +192,9 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
       // run never prompts for a keychain password/code. (VS Code's own test flag.)
       '--use-inmemory-secretstorage',
       '--no-sandbox',
-      workspace,
+      // The "open a folder first" chapter launches with no folder (empty window)
+      // so it can capture Jasper's guidance to open one.
+      ...(noWorkspace ? [] : [workspace]),
     ],
   });
 
