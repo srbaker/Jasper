@@ -33,8 +33,11 @@ export default defineConfig({
     // The living-documentation feed. Screenshots attached during a step ride in
     // as that step's `embeddings` — but the json reporter defaults
     // skipAttachments:true, so we must explicitly opt in to keep them.
+    // One JSON per run, named by the FEED env (default "report"). The manual
+    // generator reads the whole cucumber-report/ dir, so running each tagged
+    // group under its own FEED accumulates all chapters into one manual.
     cucumberReporter('json', {
-      outputFile: 'cucumber-report/report.json',
+      outputFile: `cucumber-report/${process.env.FEED ?? 'report'}.json`,
       skipAttachments: false,
     }),
     ['html', { open: 'never', outputFolder: 'playwright-report' }],

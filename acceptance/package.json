@@ -11,6 +11,7 @@
     "test:download": "bddgen && playwright test --grep @download",
     "test:ci": "xvfb-run -a npm test",
     "manual": "npm --prefix manual run manual",
+    "manual:all": "bash scripts/build-manual.sh",
     "manual:build": "npm --prefix manual run build"
   },
   "devDependencies": {
