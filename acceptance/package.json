@@ -6,8 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "bdd": "bddgen",
-    "test": "bddgen && playwright test --grep-invert @tricky",
+    "test": "bddgen && playwright test --grep-invert \"@tricky|@download\"",
     "test:tricky": "bddgen && playwright test --grep @tricky",
+    "test:download": "bddgen && playwright test --grep @download",
     "test:ci": "xvfb-run -a npm test",
     "manual": "npm --prefix manual run manual",
     "manual:build": "npm --prefix manual run build"

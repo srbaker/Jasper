@@ -7,6 +7,9 @@ node_modules/
 # Pinned VS Code download cache (@vscode/test-electron)
 .vscode-test/
 
+# Persistent GemStone-release cache for the @download chapter (large; fetched once)
+.download-cache/
+
 # Playwright + test artifacts
 test-results/
 playwright-report/

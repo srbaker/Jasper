@@ -11,10 +11,14 @@
  *   - default            → Jasper loaded from source (development mode)
  *   - `@install` / `@bare` → a bare editor, for installing Jasper from the marketplace
  */
+import * as path from 'node:path';
 import { test as base } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { launchVSCode } from './vscode';
+
+/** Persistent, git-ignored cache for the "Download GemStone" chapter. */
+const DOWNLOAD_CACHE = path.resolve(__dirname, '..', '.download-cache', 'gemstone-root');
 
 export type AcceptanceTestFixtures = {
   /** The workbench page for this scenario, ready to drive. */
@@ -33,6 +37,7 @@ export const test = base.extend<AcceptanceTestFixtures>({
     const vscode = await launchVSCode({
       development: !bare,
       workspaceTrust: $tags.includes('@trust'),
+      gemstoneRootPath: $tags.includes('@download') ? DOWNLOAD_CACHE : undefined,
     });
     await use(vscode.window);
     await vscode.dispose();

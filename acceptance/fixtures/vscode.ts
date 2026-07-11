@@ -74,6 +74,12 @@ export interface LaunchOptions {
    * scenario passes `--disable-workspace-trust` so the dialog never interrupts.
    */
   workspaceTrust?: boolean;
+  /**
+   * Override `gemstone.rootPath`. Default is an empty throwaway dir (isolation).
+   * The "Download GemStone" chapter points this at a persistent, git-ignored
+   * cache so a release is fetched once and reused by later runs.
+   */
+  gemstoneRootPath?: string;
 }
 
 /**
@@ -116,7 +122,7 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jasper-acceptance-'));
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'jasper-workspace-'));
 
-  const gemstoneRoot = path.join(profile, 'gemstone-root');
+  const gemstoneRoot = options.gemstoneRootPath ?? path.join(profile, 'gemstone-root');
   fs.mkdirSync(gemstoneRoot, { recursive: true });
   const settings = {
     'gemstone.rootPath': gemstoneRoot,
