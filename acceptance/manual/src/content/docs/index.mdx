@@ -1,0 +1,29 @@
+---
+title: The Jasper User Manual
+description: A living manual for the GemStone/S development environment in VS Code.
+---
+
+Jasper turns VS Code into a full GemStone/S 64&nbsp;Bit Smalltalk development
+environment — versions and databases, logins and sessions, a system browser, a
+debugger, and Rowan package authoring.
+
+This manual is **living documentation**. Every page under **Features** is
+generated from Jasper's acceptance tests: the same run that verifies the software
+behaves also captures what each screen looks like and writes it here. The prose
+you are reading now is authored by hand; the demonstrations that follow are
+produced by the machine. Because they come from one run, the manual cannot drift
+out of step with the product — if a feature changes and its test is updated, the
+chapter regenerates to match, and if a test fails, the manual says so.
+
+## How to read the Features chapters
+
+Each chapter is one feature, written in plain language. Under it, each scenario is
+a short walk-through: the steps a user takes, and — beneath the steps — the actual
+screenshots captured as those steps ran. A green badge means the step passed on
+the last run; a red badge means it did not.
+
+:::note
+This is the Phase A proof of the pipeline: one feature, generated end to end from
+a Cucumber test feed into this Astro site and a print-ready PDF. Real coverage
+(stones, logins, Rowan, WebGS) arrives in later phases.
+:::

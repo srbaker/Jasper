@@ -1,0 +1,26 @@
+---
+// One feature: its narrative (the free text under `Feature:`) followed by its
+// scenarios. The page title/H1 comes from Starlight frontmatter, so this
+// component starts at the description. Generic — the top-level component the
+// generated MDX pages render.
+import type { ManualFeature } from '@engine/model';
+import Scenario from './Scenario.astro';
+
+interface Props {
+  feature: ManualFeature;
+  headingLevel?: 2 | 3 | 4;
+}
+const { feature, headingLevel = 3 } = Astro.props;
+---
+
+<div class="feature">
+  {feature.description && (
+    <div class="feature-description">
+      {feature.description.split('\n\n').map((para) => <p>{para}</p>)}
+    </div>
+  )}
+
+  {feature.scenarios.map((scenario) => (
+    <Scenario scenario={scenario} headingLevel={headingLevel} />
+  ))}
+</div>

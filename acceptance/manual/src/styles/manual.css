@@ -1,0 +1,143 @@
+/* Shared styling for the generated feature/scenario/step/screen components.
+   Used both inside Starlight pages and in the print route, so it leans on plain
+   selectors and a couple of CSS variables Starlight also defines. */
+
+.feature-description {
+  margin-block: 0.5rem 1.5rem;
+}
+
+.scenario {
+  margin-block: 2rem;
+  padding-block-start: 0.5rem;
+  border-top: 1px solid var(--sl-color-gray-5, #d0d0d0);
+}
+
+.scenario-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.scenario-tags {
+  margin-block: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag {
+  font: 500 0.75rem/1.4 var(--sl-font-mono, monospace);
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--sl-color-gray-6, #eee);
+  color: var(--sl-color-gray-2, #333);
+}
+
+.scenario-description {
+  color: var(--sl-color-gray-2, #444);
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.step {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--sl-color-gray-5, #d0d0d0);
+  margin-block: 0.4rem;
+  background: var(--sl-color-gray-7, #f6f6f6);
+  border-radius: 0 4px 4px 0;
+}
+
+.step-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.step-keyword {
+  font-weight: 700;
+  color: var(--sl-color-accent, #6a4cff);
+}
+
+.step-text {
+  flex: 1 1 auto;
+}
+
+.step-time {
+  font: 0.75rem/1 var(--sl-font-mono, monospace);
+  color: var(--sl-color-gray-3, #777);
+}
+
+.step-passed { border-left-color: #2e7d32; }
+.step-failed { border-left-color: #c62828; }
+.step-skipped { border-left-color: #b0850f; opacity: 0.85; }
+
+.step-docstring,
+.step-error {
+  margin-block: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font: 0.8rem/1.4 var(--sl-font-mono, monospace);
+  white-space: pre-wrap;
+}
+
+.step-docstring { background: var(--sl-color-gray-6, #ececec); }
+.step-error { background: #fdecea; color: #7a1c14; }
+
+.step-datatable {
+  margin-block: 0.5rem 0;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.step-datatable td {
+  border: 1px solid var(--sl-color-gray-5, #d0d0d0);
+  padding: 0.2rem 0.5rem;
+}
+
+.step-screens {
+  margin-block-start: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.screen {
+  margin: 0;
+  max-width: 100%;
+}
+
+.screen img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-gray-5, #cfcfcf);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.screen figcaption {
+  margin-block-start: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-3, #777);
+}
+
+/* Status pills */
+.status-badge {
+  font: 600 0.68rem/1.4 var(--sl-font-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+}
+.status-passed { background: #2e7d32; }
+.status-failed { background: #c62828; }
+.status-skipped { background: #b0850f; }
+.status-pending,
+.status-undefined,
+.status-ambiguous,
+.status-unknown { background: #6b6b6b; }

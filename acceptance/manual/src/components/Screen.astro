@@ -1,0 +1,15 @@
+---
+// One screenshot, framed with its caption. `screenshot.src` is a site-absolute
+// URL written into the public/ dir by the generator. Generic.
+import type { ManualScreenshot } from '@engine/model';
+
+interface Props {
+  screenshot: ManualScreenshot;
+}
+const { screenshot } = Astro.props;
+---
+
+<figure class="screen">
+  <img src={screenshot.src} alt={screenshot.name} loading="lazy" />
+  <figcaption>{screenshot.name}</figcaption>
+</figure>

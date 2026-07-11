@@ -1,0 +1,34 @@
+---
+// One scenario: heading + status, tags, description, and its ordered steps.
+// `headingLevel` lets the print route nest scenarios under feature headings.
+// Generic.
+import type { ManualScenario } from '@engine/model';
+import StatusBadge from './StatusBadge.astro';
+import Step from './Step.astro';
+
+interface Props {
+  scenario: ManualScenario;
+  headingLevel?: 2 | 3 | 4;
+}
+const { scenario, headingLevel = 3 } = Astro.props;
+const Heading = `h${headingLevel}` as const;
+---
+
+<section class="scenario" id={scenario.slug}>
+  <Heading class="scenario-title">
+    <span>{scenario.name}</span>
+    <StatusBadge status={scenario.status} />
+  </Heading>
+
+  {scenario.tags.length > 0 && (
+    <p class="scenario-tags">
+      {scenario.tags.map((tag) => <span class="tag">{tag}</span>)}
+    </p>
+  )}
+
+  {scenario.description && <p class="scenario-description">{scenario.description}</p>}
+
+  <ol class="steps">
+    {scenario.steps.map((step) => <Step step={step} />)}
+  </ol>
+</section>
