@@ -3,19 +3,21 @@
  * Gherkin runtime) extended with Jasper's fixtures. Every step file does
  * `import { test } from '../fixtures/test'` and `createBdd(test)`, so bddgen
  * generates specs that import this same instance.
+ *
+ * The editor is launched **per scenario**, configured from the scenario's tags —
+ * a cached launch is only a few seconds, and per-scenario launches keep every
+ * scenario independent (which the living-documentation model wants) and let
+ * different chapters use different editor modes:
+ *   - default            → Jasper loaded from source (development mode)
+ *   - `@install` / `@bare` → a bare editor, for installing Jasper from the marketplace
  */
 import { test as base } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { launchVSCode, LaunchedVSCode } from './vscode';
-
-export type AcceptanceWorkerFixtures = {
-  /** An isolated VS Code + Jasper, launched once per worker. */
-  vscodeApp: LaunchedVSCode;
-};
+import { launchVSCode } from './vscode';
 
 export type AcceptanceTestFixtures = {
-  /** The workbench page, ready to drive. */
+  /** The workbench page for this scenario, ready to drive. */
   window: Page;
   /**
    * Capture a deliberately-named "screen" into the living-documentation manual,
@@ -25,19 +27,15 @@ export type AcceptanceTestFixtures = {
   screen: (name: string) => Promise<void>;
 };
 
-export const test = base.extend<AcceptanceTestFixtures, AcceptanceWorkerFixtures>({
-  vscodeApp: [
-    // eslint-disable-next-line no-empty-pattern
-    async ({}, use) => {
-      const vscode = await launchVSCode();
-      await use(vscode);
-      await vscode.dispose();
-    },
-    { scope: 'worker' },
-  ],
-
-  window: async ({ vscodeApp }, use) => {
-    await use(vscodeApp.window);
+export const test = base.extend<AcceptanceTestFixtures>({
+  window: async ({ $tags }, use) => {
+    const bare = $tags.includes('@install') || $tags.includes('@bare');
+    const vscode = await launchVSCode({
+      development: !bare,
+      workspaceTrust: $tags.includes('@trust'),
+    });
+    await use(vscode.window);
+    await vscode.dispose();
   },
 
   screen: async ({ window }, use) => {

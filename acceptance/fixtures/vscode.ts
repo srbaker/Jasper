@@ -60,6 +60,20 @@ export interface LaunchedVSCode {
 export interface LaunchOptions {
   /** Workspace `.vscode/settings.json` entries seeded before launch. */
   workspaceSettings?: Record<string, unknown>;
+  /**
+   * When true (default) Jasper is loaded from source via
+   * `--extensionDevelopmentPath`. When false the editor launches **bare** — no
+   * extension — which the "Install Jasper" chapter uses to install it from the
+   * marketplace through the UI.
+   */
+  development?: boolean;
+  /**
+   * When true, leave VS Code's Workspace Trust on and force the startup prompt,
+   * so the "Do you trust the authors of the files in this folder?" dialog appears
+   * (the "Trust your workspace" chapter captures it). Default false — every other
+   * scenario passes `--disable-workspace-trust` so the dialog never interrupts.
+   */
+  workspaceTrust?: boolean;
 }
 
 /**
@@ -114,14 +128,33 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   fs.mkdirSync(dotVscode, { recursive: true });
   fs.writeFileSync(path.join(dotVscode, 'settings.json'), JSON.stringify(settings, null, 2));
 
+  // Application-scoped user settings live in the user-data dir. Disable extension
+  // signature verification: it otherwise hangs the marketplace *UI* install in
+  // this isolated build (the CLI `--install-extension` path doesn't enforce it).
+  const userSettings: Record<string, unknown> = { 'extensions.verifySignature': false };
+  if (options.workspaceTrust) {
+    // Force the Workspace Trust startup prompt so the dialog can be captured.
+    userSettings['security.workspace.trust.enabled'] = true;
+    userSettings['security.workspace.trust.startupPrompt'] = 'always';
+  }
+  const userDir = path.join(profile, 'user-data', 'User');
+  fs.mkdirSync(userDir, { recursive: true });
+  fs.writeFileSync(path.join(userDir, 'settings.json'), JSON.stringify(userSettings, null, 2));
+
+  const development = options.development ?? true;
+
   const app = await electron.launch({
     executablePath: electronBinary(vscodeCliPath),
     env: sandboxedEnv(profile),
     args: [
-      `--extensionDevelopmentPath=${repoRoot}`,
+      // Development mode loads Jasper from source; bare mode omits it so the
+      // extension can be installed from the marketplace through the UI.
+      ...(development ? [`--extensionDevelopmentPath=${repoRoot}`] : []),
       `--user-data-dir=${path.join(profile, 'user-data')}`,
       `--extensions-dir=${path.join(profile, 'extensions')}`,
-      '--disable-workspace-trust',
+      // Every scenario disables Workspace Trust so the dialog never interrupts —
+      // except the "Trust your workspace" chapter, which wants to capture it.
+      ...(options.workspaceTrust ? [] : ['--disable-workspace-trust']),
       '--skip-welcome',
       '--skip-release-notes',
       '--disable-updates',
@@ -146,9 +179,11 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   const window = await app.firstWindow();
 
   if (process.platform === 'darwin') {
-    // Move the window off every display so it isn't on the visible desktop.
-    // (Off-screen, not hidden: a hidden window reports its contents as
-    // non-visible, which would make Playwright's actionability checks hang.)
+    // Move the window off every display so it isn't on the visible desktop. It
+    // can still flash briefly when first created — that's inherent to a GUI
+    // Electron app on macOS (the flash-free path is a headless Linux run in CI).
+    // Off-screen, not hidden: a hidden window reports its contents as
+    // non-visible, which would hang Playwright's actionability checks.
     await app.evaluate(({ BrowserWindow }) => {
       for (const win of BrowserWindow.getAllWindows()) win.setPosition(-20000, -20000);
     });
