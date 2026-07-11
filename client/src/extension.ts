@@ -57,6 +57,7 @@ import { supportsEnhancedInspector } from './enhancedInspectorInstall';
 import { DebuggerPanel } from './debuggerPanel';
 import { InlineValuesCodeLensProvider } from './inlineValuesCodeLens';
 import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession } from './gemstoneFileSystemProvider';
+import { TonelMethodFileSystemProvider } from './tonelMethodFs';
 import { openWorkspace } from './workspace';
 import { openTutorialNotebook } from './tutorialNotebook';
 import { GemStoneDebugSession } from './gemstoneDebugSession';
@@ -2330,6 +2331,19 @@ export function activate(context: vscode.ExtensionContext) {
     rowanProjectProvider.refresh();
     rowanProjectView.description = rowanProjectProvider.projectName();
   };
+  // Disk-first per-method editing: a tonel-method:// document is one method
+  // sliced out of its .class.st (editable, saves back in place). Clicking a
+  // method row in the project tree opens one.
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider(
+      TonelMethodFileSystemProvider.scheme, new TonelMethodFileSystemProvider(),
+    ),
+    vscode.commands.registerCommand('gemstone.rowanOpenProjectMethod', async (uri: vscode.Uri) => {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.languages.setTextDocumentLanguage(doc, 'gemstone-smalltalk');
+      await vscode.window.showTextDocument(doc, { preview: true });
+    }),
+  );
   // Resolve a GemStone install that can run the Rowan solo scripts: prefer the
   // connected session's version, else the first extracted version that ships the
   // tooling. $GEMSTONE is the sysadmin path, or two dirs up from the GCI library

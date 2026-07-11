@@ -14,6 +14,7 @@ import {
   RowanProjectMethodItem,
   RowanProjectMessageItem,
 } from '../rowanProjectView';
+import { parseTonelMethodUri } from '../tonelMethodFs';
 
 // Write a Tonel class file into a package directory of a project.
 function writeClass(projectDir: string, pkg: string, fileName: string, body: string): void {
@@ -169,7 +170,7 @@ describe('RowanProjectTreeProvider drill-down', () => {
     ]);
   });
 
-  it('opens the class file at the method’s line when a method row is clicked', () => {
+  it('opens a focused editable slice of the method when a method row is clicked', () => {
     const dir = makeProjectDir(['Pkg-Core']);
     writeClass(dir, 'Pkg-Core', 'Thing.class.st', THING_CLASS);
 
@@ -178,7 +179,11 @@ describe('RowanProjectTreeProvider drill-down', () => {
     const [cls] = provider.getChildren(pkg) as RowanProjectClassItem[];
     const [firstMethod] = provider.getChildren(cls) as RowanProjectMethodItem[];
 
-    expect(firstMethod.command?.command).toBe('vscode.open');
-    expect(firstMethod.command?.arguments?.[0].fsPath).toBe(path.join(dir, 'src', 'Pkg-Core', 'Thing.class.st'));
+    expect(firstMethod.command?.command).toBe('gemstone.rowanOpenProjectMethod');
+    expect(parseTonelMethodUri(firstMethod.command?.arguments?.[0])).toEqual({
+      file: path.join(dir, 'src', 'Pkg-Core', 'Thing.class.st'),
+      side: 'instance',
+      selector: 'value',
+    });
   });
 });

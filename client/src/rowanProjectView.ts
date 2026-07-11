@@ -5,6 +5,7 @@ import {
   RowanWorkspaceProject, RowanProjectPackage, RowanProjectClass,
 } from './rowanProject';
 import { parseTonelClass, TonelMethod } from './tonelReader';
+import { buildTonelMethodUri } from './tonelMethodFs';
 
 /** A package (directory of class source) in the workspace's Rowan project. */
 export class RowanProjectPackageItem extends vscode.TreeItem {
@@ -41,13 +42,12 @@ export class RowanProjectMethodItem extends vscode.TreeItem {
     if (method.side === 'class') this.description = 'class';
     this.tooltip = method.category ? `${method.side} · ${method.category}` : method.side;
     this.contextValue = 'rowanProjectMethod';
+    // Open the method on its own — a focused, editable disk-first slice of the
+    // .class.st (see tonelMethodFs) — rather than the whole class file.
     this.command = {
-      command: 'vscode.open',
-      title: 'Open Method Source',
-      arguments: [
-        vscode.Uri.file(file),
-        { selection: new vscode.Range(method.signatureLine, 0, method.signatureLine, 0) },
-      ],
+      command: 'gemstone.rowanOpenProjectMethod',
+      title: 'Open Method',
+      arguments: [buildTonelMethodUri(file, method.side, method.selector)],
     };
   }
 }
