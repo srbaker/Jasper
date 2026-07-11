@@ -44,6 +44,18 @@
         "editor.minimap.enabled": false
       }
     },
+    "customEditors": [
+      {
+        "viewType": "gemstone.ston",
+        "displayName": "STON Settings",
+        "selector": [
+          {
+            "filenamePattern": "*.ston"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
     "languages": [
       {
         "id": "gemstone-topaz",
@@ -793,9 +805,45 @@
       },
       {
         "command": "gemstone.rowanAddPackage",
-        "title": "Add Package…",
+        "title": "Add Dependency…",
         "category": "GemStone",
         "icon": "$(add)"
+      },
+      {
+        "command": "gemstone.rowanEditProjectMetadata",
+        "title": "Edit Project Metadata…",
+        "category": "GemStone",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "gemstone.rowanAddProjectPackage",
+        "title": "Add Package…",
+        "category": "GemStone",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "gemstone.rowanAddComponent",
+        "title": "Add Component…",
+        "category": "GemStone",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "gemstone.rowanManageDependencies",
+        "title": "Manage Dependencies…",
+        "category": "GemStone",
+        "icon": "$(references)"
+      },
+      {
+        "command": "gemstone.stonViewSettings",
+        "title": "View as Settings",
+        "category": "GemStone",
+        "icon": "$(symbol-property)"
+      },
+      {
+        "command": "gemstone.stonViewSource",
+        "title": "View as Text",
+        "category": "GemStone",
+        "icon": "$(code)"
       },
       {
         "command": "gemstone.rowanFindClassPackage",
@@ -1081,6 +1129,34 @@
           "when": "false"
         },
         {
+          "command": "gemstone.rowanAddPackage",
+          "when": "gemstone.workspaceIsRowanProject"
+        },
+        {
+          "command": "gemstone.rowanEditProjectMetadata",
+          "when": "gemstone.workspaceIsRowanProject"
+        },
+        {
+          "command": "gemstone.rowanAddProjectPackage",
+          "when": "gemstone.workspaceIsRowanProject"
+        },
+        {
+          "command": "gemstone.rowanAddComponent",
+          "when": "gemstone.workspaceIsRowanProject"
+        },
+        {
+          "command": "gemstone.rowanManageDependencies",
+          "when": "gemstone.workspaceIsRowanProject"
+        },
+        {
+          "command": "gemstone.stonViewSource",
+          "when": "resourceExtname == .ston"
+        },
+        {
+          "command": "gemstone.stonViewSettings",
+          "when": "resourceExtname == .ston"
+        },
+        {
           "command": "gemstone.toggleInlineValues",
           "when": "false"
         },
@@ -1109,6 +1185,18 @@
           "when": "gemstone.hasActiveSession && gemstone.enhancedInspectorSupported"
         }
       ],
+      "editor/title": [
+        {
+          "command": "gemstone.stonViewSource",
+          "when": "resourceExtname == .ston && activeCustomEditorId == gemstone.ston",
+          "group": "navigation"
+        },
+        {
+          "command": "gemstone.stonViewSettings",
+          "when": "resourceExtname == .ston && activeCustomEditorId != gemstone.ston",
+          "group": "navigation"
+        }
+      ],
       "view/title": [
         {
           "command": "gemstone.openWalkthrough",
@@ -1121,9 +1209,24 @@
           "group": "navigation@0"
         },
         {
-          "command": "gemstone.rowanAddPackage",
+          "command": "gemstone.rowanEditProjectMetadata",
           "when": "view == gemstoneRowanProject",
           "group": "navigation@0"
+        },
+        {
+          "command": "gemstone.rowanAddProjectPackage",
+          "when": "view == gemstoneRowanProject",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gemstone.rowanAddComponent",
+          "when": "view == gemstoneRowanProject",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gemstone.rowanManageDependencies",
+          "when": "view == gemstoneRowanProject",
+          "group": "navigation@3"
         },
         {
           "command": "gemstone.rowanAddRepo",

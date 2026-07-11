@@ -28,12 +28,21 @@ import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl } fro
 import { NbCancelledError } from './nbRunner';
 import { RowanRepoRegistry } from './rowanRepos';
 import { RowanTreeProvider, RowanRepoItem, RowanLoadedProjectItem, RowanChangesProjectItem } from './rowanTreeProvider';
-import { isRowanProjectRoot } from './rowanProject';
+import { isRowanProjectRoot, readRowanWorkspaceProject } from './rowanProject';
 import { RowanProjectTreeProvider } from './rowanProjectView';
 import { createRowanProject } from './rowanCreate';
 import { mergeCatalog, RowanCatalogEntry } from './rowanCatalog';
-import { metacelloLoadExpression } from './rowanMetacello';
-import { addPreloadDependency } from './rowanDependency';
+import { addPreloadDependency, listPreloadDependencies, removePreloadDependency } from './rowanDependency';
+import {
+  setProjectSpecField,
+  renameProject,
+  addProjectPackage,
+  addProjectComponent,
+  listComponents,
+  isValidRowanName,
+} from './rowanMetadata';
+import { StonEditorProvider } from './stonEditor';
+import { StonSymbolProvider } from './stonSymbols';
 import { RowanDecorationProvider } from './rowanDecorations';
 import { GlobalsBrowser } from './globalsBrowser';
 import { CommentBrowser } from './commentBrowser';
@@ -2230,6 +2239,44 @@ export function activate(context: vscode.ExtensionContext) {
   // The Rowan project at the open workspace root, shown as a section in the
   // Explorer (contributed only when gemstone.workspaceIsRowanProject). Its
   // packages are read from disk — co-located with the file tree, no stone.
+  // .ston files open by default in an Xcode-build-settings-style editable
+  // settings grid (StonEditorProvider); "View as Text" / Reopen With… drops to
+  // the plain, syntax-highlighted source. The two title-bar commands toggle
+  // between the two views.
+  // The .ston being viewed: the command arg (from the title-bar menu), else the
+  // active tab's resource — its input carries the URI for both the text editor
+  // and the custom settings editor.
+  const activeStonUri = (uri?: vscode.Uri): vscode.Uri | undefined => {
+    if (uri instanceof vscode.Uri) return uri;
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { uri?: vscode.Uri } | undefined;
+    const candidate = input?.uri ?? vscode.window.activeTextEditor?.document.uri;
+    return candidate?.fsPath.endsWith('.ston') ? candidate : undefined;
+  };
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      StonEditorProvider.viewType,
+      new StonEditorProvider({
+        getSession: () => sessionManager.getSelectedSession() ?? null,
+        onDidChangeSession: sessionManager.onDidChangeSelection,
+        getLogins: () => storage.getLogins(),
+        loadProject: async (root: string) => {
+          const session = await sessionManager.resolveSession();
+          if (session) await loadRowanFromDirectory(session, root, sessionManager);
+        },
+      }),
+      { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false },
+    ),
+    vscode.languages.registerDocumentSymbolProvider({ language: 'ston' }, new StonSymbolProvider()),
+    vscode.commands.registerCommand('gemstone.stonViewSource', async (uri?: vscode.Uri) => {
+      const target = activeStonUri(uri);
+      if (target) await vscode.commands.executeCommand('vscode.openWith', target, 'default');
+    }),
+    vscode.commands.registerCommand('gemstone.stonViewSettings', async (uri?: vscode.Uri) => {
+      const target = activeStonUri(uri);
+      if (target) await vscode.commands.executeCommand('vscode.openWith', target, StonEditorProvider.viewType);
+    }),
+  );
+
   const rowanProjectProvider = new RowanProjectTreeProvider();
   const rowanProjectView = vscode.window.createTreeView('gemstoneRowanProject', {
     treeDataProvider: rowanProjectProvider,
@@ -2262,6 +2309,16 @@ export function activate(context: vscode.ExtensionContext) {
     await vscode.window.showTextDocument(doc, selection ? { selection } : {});
   };
   // Prompt for a custom Metacello baseline to add to the (Jasper-owned) catalogue.
+  // A QuickPick over a fixed option set, marking the current value (and including
+  // it when it isn't one of the presets, so an unusual existing value survives).
+  const pickFrom = async (options: string[], current: string, title: string): Promise<string | undefined> => {
+    const opts = options.includes(current) ? options : [current, ...options];
+    const picked = await vscode.window.showQuickPick(
+      opts.map((o) => ({ label: o, description: o === current ? 'current' : undefined })),
+      { title, placeHolder: 'Pick a value' },
+    );
+    return picked?.label;
+  };
   const promptCustomCatalogEntry = async (): Promise<RowanCatalogEntry | undefined> => {
     const name = (await vscode.window.showInputBox({ prompt: 'Project name', ignoreFocusOut: true }))?.trim();
     if (!name) return undefined;
@@ -2323,8 +2380,8 @@ export function activate(context: vscode.ExtensionContext) {
         })),
       ];
       const picked = await vscode.window.showQuickPick(items, {
-        title: 'Add Package — install a Metacello baseline',
-        placeHolder: 'Pick a project to install, or add your own baseline',
+        title: 'Add Dependency — declare a Metacello baseline',
+        placeHolder: 'Pick a project to add, or declare your own baseline',
         matchOnDescription: true,
         matchOnDetail: true,
       });
@@ -2340,48 +2397,175 @@ export function activate(context: vscode.ExtensionContext) {
         );
       }
 
+      // Declare-only: write the Metacello recipe into the project's Core
+      // component as a pre-load doit (disk; loads when the project loads). No
+      // stone needed. Loading/adopting into a running stone is a later workflow.
       const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const how = await vscode.window.showQuickPick(
-        [
-          { label: '$(zap) Pre-load doit', how: 'preload' as const,
-            detail: "Write the Metacello load into this project's Core component as a pre-load doit (disk only). It loads with your project." },
-          { label: '$(cloud-download) Load + adopt to a Rowan project', how: 'adopt' as const,
-            detail: 'Load into the connected stone and adopt into a real Rowan project (coming soon — shows the load for now).' },
-        ],
-        { title: `Add ${entry.name} as a dependency`, placeHolder: 'How should it be added?' },
-      );
-      if (!how) return;
-
-      if (how.how === 'preload') {
-        if (!root || !isRowanProjectRoot(root)) {
-          vscode.window.showErrorMessage('Open a Rowan project first — the pre-load doit is written into its Core component.');
-          return;
-        }
-        const result = addPreloadDependency(root, entry);
-        if (!result.success) {
-          vscode.window.showErrorMessage(`Could not add ${entry.name}: ${result.error}`);
-          return;
-        }
-        rowanProvider.refresh();
-        refreshRowanProjectView();
-        const choice = await vscode.window.showInformationMessage(
-          result.alreadyPresent
-            ? `${entry.name} is already a pre-load dependency.`
-            : `Added ${entry.name} as a pre-load dependency.`,
-          'Open Doit',
-        );
-        if (choice === 'Open Doit' && result.doitFile) {
-          await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(result.doitFile)));
-        }
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project first — the dependency is declared in its Core component.');
         return;
       }
+      const result = addPreloadDependency(root, entry);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add ${entry.name}: ${result.error}`);
+        return;
+      }
+      rowanProvider.refresh();
+      refreshRowanProjectView();
+      void vscode.window.showInformationMessage(
+        result.alreadyPresent
+          ? `${entry.name} is already a dependency of this project.`
+          : `Added ${entry.name} as a dependency.`,
+      );
+    }),
 
-      // adopt → Rowan project: deferred. Show the idiomatic load incantation.
-      const doc = await vscode.workspace.openTextDocument({
-        language: 'gemstone-smalltalk',
-        content: metacelloLoadExpression(entry),
+    // Edit the project's core metadata (name, package format, package convention)
+    // via native pickers, writing back to project.ston / the load spec.
+    vscode.commands.registerCommand('gemstone.rowanEditProjectMetadata', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const project = root && isRowanProjectRoot(root) ? readRowanWorkspaceProject(root) : null;
+      if (!root || !project) {
+        vscode.window.showErrorMessage('Open a Rowan project to edit its metadata.');
+        return;
+      }
+      const fmt = project.packageFormat ?? 'tonel';
+      const conv = project.packageConvention ?? 'RowanHybrid';
+      type Field = 'name' | 'format' | 'convention';
+      const field = await vscode.window.showQuickPick(
+        [
+          { label: '$(tag) Name', description: project.name, field: 'name' as Field },
+          { label: '$(file-code) Package format', description: fmt, field: 'format' as Field },
+          { label: '$(list-tree) Package convention', description: conv, field: 'convention' as Field },
+        ],
+        { title: `Edit ${project.name}`, placeHolder: 'Pick a field to edit' },
+      );
+      if (!field) return;
+
+      const apply = (r: { success: boolean; error?: string }, ok: string): void => {
+        if (!r.success) {
+          vscode.window.showErrorMessage(`Could not update ${project.name}: ${r.error}`);
+          return;
+        }
+        refreshRowanProjectView();
+        vscode.window.showInformationMessage(ok);
+      };
+
+      if (field.field === 'name') {
+        const newName = (await vscode.window.showInputBox({
+          title: 'Rename project', value: project.name, ignoreFocusOut: true,
+          validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+        }))?.trim();
+        if (!newName || newName === project.name) return;
+        apply(renameProject(root, newName), `Renamed project to ${newName}.`);
+      } else if (field.field === 'format') {
+        const value = await pickFrom(['tonel', 'filetree'], fmt, 'Package format');
+        if (!value || value === fmt) return;
+        apply(setProjectSpecField(root, 'packageFormat', value), `Package format is now ${value}.`);
+      } else {
+        const value = await pickFrom(['RowanHybrid', 'Rowan'], conv, 'Package convention');
+        if (!value || value === conv) return;
+        apply(setProjectSpecField(root, 'packageConvention', value), `Package convention is now ${value}.`);
+      }
+    }),
+
+    // Create a new package (directory + properties.st) and register it in a
+    // component so it loads.
+    vscode.commands.registerCommand('gemstone.rowanAddProjectPackage', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to add a package.');
+        return;
+      }
+      const name = (await vscode.window.showInputBox({
+        title: 'Add package', prompt: 'New package name', placeHolder: 'MyProject-Core', ignoreFocusOut: true,
+        validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+      }))?.trim();
+      if (!name) return;
+
+      // Register in a component so the package loads; pick when there's a choice.
+      const components = listComponents(root);
+      let componentName = components[0]?.name ?? 'Core';
+      if (components.length > 1) {
+        const picked = await vscode.window.showQuickPick(components.map((c) => c.name), {
+          title: 'Add package to which component?', placeHolder: 'The package will be listed in this component',
+        });
+        if (!picked) return;
+        componentName = picked;
+      }
+
+      const result = addProjectPackage(root, name, componentName);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add package: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      vscode.window.showInformationMessage(`Added package ${name} to ${componentName}.`);
+    }),
+
+    // Create a new load component and wire it into the project's load spec.
+    vscode.commands.registerCommand('gemstone.rowanAddComponent', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to add a component.');
+        return;
+      }
+      const name = (await vscode.window.showInputBox({
+        title: 'Add component', prompt: 'New component name', placeHolder: 'Tests', ignoreFocusOut: true,
+        validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+      }))?.trim();
+      if (!name) return;
+      const result = addProjectComponent(root, name);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add component: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      const choice = await vscode.window.showInformationMessage(`Added component ${name}.`, 'Open');
+      if (choice === 'Open' && result.path) {
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(result.path)));
+      }
+    }),
+
+    // List / remove pre-load dependencies (and add, via the catalogue flow).
+    vscode.commands.registerCommand('gemstone.rowanManageDependencies', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to manage its dependencies.');
+        return;
+      }
+      const deps = listPreloadDependencies(root);
+      const ADD = '$(add) Add dependency…';
+      type Item = vscode.QuickPickItem & { repository?: string; name?: string };
+      const items: Item[] = [
+        { label: ADD, alwaysShow: true },
+        ...(deps.length ? [{ label: 'Dependencies', kind: vscode.QuickPickItemKind.Separator } as Item] : []),
+        ...deps.map((d): Item => ({
+          label: `$(package) ${d.name}`, description: d.baseline, detail: d.repository,
+          repository: d.repository, name: d.name,
+        })),
+      ];
+      const picked = await vscode.window.showQuickPick(items, {
+        title: 'Manage dependencies',
+        placeHolder: deps.length ? 'Pick a dependency to remove, or add one' : 'No dependencies yet — add one',
+        matchOnDetail: true,
       });
-      await vscode.window.showTextDocument(doc);
+      if (!picked) return;
+      if (picked.label === ADD) {
+        await vscode.commands.executeCommand('gemstone.rowanAddPackage');
+        return;
+      }
+      if (!picked.repository) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Remove dependency ${picked.name}?`, { modal: true }, 'Remove',
+      );
+      if (confirm !== 'Remove') return;
+      const result = removePreloadDependency(root, picked.repository);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not remove ${picked.name}: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      vscode.window.showInformationMessage(`Removed dependency ${picked.name}.`);
     }),
 
     vscode.commands.registerCommand('gemstone.rowanNewProject', async () => {

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createRowanProject } from '../rowanCreate';
-import { addPreloadDependency } from '../rowanDependency';
+import { addPreloadDependency, listPreloadDependencies, removePreloadDependency } from '../rowanDependency';
 import { RowanCatalogEntry } from '../rowanCatalog';
 
 const dirs: string[] = [];
@@ -68,5 +68,65 @@ describe('addPreloadDependency', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('not found');
+  });
+});
+
+describe('listPreloadDependencies', () => {
+  it('reports the name, baseline, and repository of an added dependency', () => {
+    const root = project();
+    addPreloadDependency(root, seaside);
+
+    const deps = listPreloadDependencies(root);
+
+    expect(deps).toHaveLength(1);
+    expect(deps[0]).toMatchObject({ name: 'Seaside', baseline: 'Seaside3', repository: seaside.repository });
+  });
+
+  it('lists every dependency in a shared doit', () => {
+    const root = project();
+    addPreloadDependency(root, seaside);
+    addPreloadDependency(root, grease);
+
+    const deps = listPreloadDependencies(root);
+
+    expect(deps.map((d) => d.name).sort()).toEqual(['Grease', 'Seaside']);
+  });
+
+  it('is empty for a project with no dependencies', () => {
+    const root = project();
+
+    expect(listPreloadDependencies(root)).toHaveLength(0);
+  });
+});
+
+describe('removePreloadDependency', () => {
+  it('removes the matched dependency and keeps the rest', () => {
+    const root = project();
+    addPreloadDependency(root, seaside);
+    addPreloadDependency(root, grease);
+
+    removePreloadDependency(root, seaside.repository);
+
+    expect(listPreloadDependencies(root).map((d) => d.name)).toEqual(['Grease']);
+    expect(read(root, 'rowan/components/preload.st')).not.toContain('SeasideSt/Seaside');
+  });
+
+  it('empties the doit when the last dependency goes', () => {
+    const root = project();
+    addPreloadDependency(root, seaside);
+
+    removePreloadDependency(root, seaside.repository);
+
+    expect(listPreloadDependencies(root)).toHaveLength(0);
+  });
+
+  it('succeeds when no dependency matches the repository', () => {
+    const root = project();
+    addPreloadDependency(root, seaside);
+
+    const result = removePreloadDependency(root, 'github://absent/absent:x/repository');
+
+    expect(result.success).toBe(true);
+    expect(listPreloadDependencies(root)).toHaveLength(1);
   });
 });

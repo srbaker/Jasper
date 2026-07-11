@@ -67,3 +67,84 @@ export function addPreloadDependency(
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+// A dependency currently declared as a component pre-load doit.
+export interface RowanDependency {
+  // Display name, from the load block's leading comment.
+  name: string;
+  baseline: string;
+  repository: string;
+  // The component whose #preloadDoitName references the doit holding it.
+  componentName: string;
+  // Absolute path to the doit .st file.
+  doitFile: string;
+}
+
+// One metacelloLoadExpression block: from its `"Load …"` comment to the `].` that
+// closes the GsDeployer send. The block's only `].` is that terminator (the inner
+// `onLock: [:ex | ex honor]` closes with `];`), so a non-greedy match is exact.
+const DEP_BLOCK = /"Load [\s\S]*?\]\./g;
+
+function parseDependencies(doit: string, componentName: string, doitFile: string): RowanDependency[] {
+  return (doit.match(DEP_BLOCK) ?? []).map((block) => ({
+    name: (block.match(/"Load (.+?) \(Metacello baseline '/) ?? [])[1]?.trim() ?? '(unknown)',
+    baseline: (block.match(/baseline:\s*'((?:[^']|'')*)'/) ?? [])[1] ?? '',
+    repository: (block.match(/repository:\s*'((?:[^']|'')*)'/) ?? [])[1] ?? '',
+    componentName,
+    doitFile,
+  }));
+}
+
+// Every pre-load dependency declared across the project's components. Reads each
+// component that has a #preloadDoitName and parses the load blocks in its doit.
+export function listPreloadDependencies(projectRoot: string): RowanDependency[] {
+  const componentsDir = path.join(projectRoot, 'rowan', 'components');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(componentsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const deps: RowanDependency[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.ston')) continue;
+    const componentName = path.basename(entry.name, '.ston');
+    let spec: string;
+    try {
+      spec = fs.readFileSync(path.join(componentsDir, entry.name), 'utf8');
+    } catch {
+      continue;
+    }
+    const doitName = spec.match(/#preloadDoitName\s*:\s*'([^']*)'/)?.[1];
+    if (!doitName) continue;
+    const doitFile = path.join(componentsDir, `${doitName}.st`);
+    let doit: string;
+    try {
+      doit = fs.readFileSync(doitFile, 'utf8');
+    } catch {
+      continue;
+    }
+    deps.push(...parseDependencies(doit, componentName, doitFile));
+  }
+  return deps;
+}
+
+// Remove the pre-load dependency identified by `repository` from its doit. The
+// doit's remaining blocks are rewritten (joined by a blank line); an emptied doit
+// becomes an empty file. Idempotent — succeeds even when nothing matched.
+export function removePreloadDependency(projectRoot: string, repository: string): AddDependencyResult {
+  for (const dep of listPreloadDependencies(projectRoot)) {
+    if (dep.repository !== repository) continue;
+    try {
+      const doit = fs.readFileSync(dep.doitFile, 'utf8');
+      const kept = (doit.match(DEP_BLOCK) ?? []).filter(
+        (block) => !block.includes(`repository: '${repository}'`),
+      );
+      fs.writeFileSync(dep.doitFile, kept.length ? `${kept.join('\n\n')}\n` : '');
+      return { success: true, doitFile: dep.doitFile };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return { success: true };
+}
