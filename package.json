@@ -81,6 +81,16 @@
           "text/x-gemstone-smalltalk"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "ston",
+        "aliases": [
+          "STON"
+        ],
+        "extensions": [
+          ".ston"
+        ],
+        "configuration": "./ston.language-configuration.json"
       }
     ],
     "grammars": [
@@ -98,6 +108,11 @@
         "language": "gemstone-smalltalk",
         "scopeName": "source.gemstone-smalltalk",
         "path": "./syntaxes/gemstone-smalltalk.tmLanguage.json"
+      },
+      {
+        "language": "ston",
+        "scopeName": "source.ston",
+        "path": "./syntaxes/ston.tmLanguage.json"
       }
     ],
     "configuration": [
