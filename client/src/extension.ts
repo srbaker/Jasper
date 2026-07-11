@@ -47,11 +47,12 @@ import { refreshEnhancedInspectorAvailable } from './enhancedInspectorAvailabili
 import { supportsEnhancedInspector } from './enhancedInspectorInstall';
 import { DebuggerPanel } from './debuggerPanel';
 import { InlineValuesCodeLensProvider } from './inlineValuesCodeLens';
-import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession } from './gemstoneFileSystemProvider';
+import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession, installStaleGemstoneTabReaper } from './gemstoneFileSystemProvider';
 import { openWorkspace } from './workspace';
 import { openTutorialNotebook } from './tutorialNotebook';
 import { GemStoneDebugSession } from './gemstoneDebugSession';
 import { InspectorTreeProvider, InspectorNode } from './inspectorTreeProvider';
+import { registerStageBrowser } from './stageBrowser';
 import { GemStoneWorkspaceSymbolProvider } from './gemstoneSymbolProvider';
 import { GemStoneDefinitionProvider } from './gemstoneDefinitionProvider';
 import { GemStoneHoverProvider } from './gemstoneHoverProvider';
@@ -387,6 +388,7 @@ export function activate(context: vscode.ExtensionContext) {
   // and broken — no session to resolve gemstone://). See DebuggerPanel.
   DebuggerPanel.initSourceTabCleanup(context.workspaceState);
 
+
   // Inline-value overlay (#5): a source-pane CodeLens toggles it. The lens is
   // emitted only for source docs a live debugger is showing; the command it fires
   // carries that doc's URI so the right panel toggles.
@@ -469,6 +471,14 @@ export function activate(context: vscode.ExtensionContext) {
   // SessionManager is created early so the Logins panel can mark the connected
   // login row (and swap its inline Login action for Logout) in single-session mode.
   sessionManager = new SessionManager();
+
+  // Sessions don't survive a window reload, so any gemstone:// method/class tab
+  // VS Code restored from the previous window is unservable and shows a broken
+  // "could not be opened" editor. Reap such stale tabs — both those already
+  // present and (winning the async-restore race) those that appear afterward.
+  // Must run after sessionManager exists (the reaper checks for a live session).
+  context.subscriptions.push(installStaleGemstoneTabReaper(sessionManager));
+
   const treeProvider = new LoginTreeProvider(storage, sessionManager);
   // The "Logins & Sessions" sidebar tree was removed; login/session management
   // now lives in the GemStone Manager and the Login Launcher below. treeProvider
@@ -560,6 +570,9 @@ export function activate(context: vscode.ExtensionContext) {
   inspectorProvider.setView(inspectorView);
   context.subscriptions.push(inspectorView, inspectorProvider);
 
+  // ── Stage Browser (cascading navigation panes) ───────────
+  const stageBrowser = registerStageBrowser(context, sessionManager);
+
   // ── GemStone FileSystem Provider ─────────────────────────
   const gemstoneFs = new GemStoneFileSystemProvider(sessionManager, exportManager);
   context.subscriptions.push(
@@ -649,6 +662,12 @@ export function activate(context: vscode.ExtensionContext) {
               const sessionId = parseInt(uri.authority, 10);
               const className = parts[2];
               SystemBrowser.methodCompiled(sessionId, className);
+              // Keep the Stage Browser's method list in sync too (new-class URIs
+              // carry no real class name, so skip those — the class-definition
+              // event below handles class creation).
+              if (className !== 'new-class') {
+                stageBrowser.onMethodCompiled(sessionId, className);
+              }
             }
           }
         }
@@ -659,6 +678,15 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     gemstoneFs.onMethodCompiled(handleMethodCompiled),
     gemstoneFs.onClassDefinitionCompiled(handleClassDefinitionCompiled),
+    // Refresh the Stage Browser's class list when a class is created/redefined
+    // (the definition event carries the real class name; the new-class URI
+    // doesn't). parts: ['', dictName, className, 'definition'].
+    gemstoneFs.onClassDefinitionCompiled((e) => {
+      const parts = e.uri.path.split('/').map(decodeURIComponent);
+      if (parts.length >= 3) {
+        stageBrowser.onClassCompiled(parseInt(e.uri.authority, 10), parts[2]);
+      }
+    }),
   );
 
   context.subscriptions.push(
@@ -1670,7 +1698,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
       const side = args.isMeta ? ' class' : '';
       const title = args.direction === 'up'
-        ? `${args.className}${side} >> #${args.selector} — superclass implementations`
+        ? `${args.className}${side} >> #${args.selector} — superclass implementors`
         : `${args.className}${side} >> #${args.selector} — subclass overrides`;
       await showMethodResults(session, results, title);
     }),
