@@ -333,7 +333,8 @@
           "id": "gemstoneInspector",
           "name": "Inspector",
           "type": "tree",
-          "icon": "$(eye)"
+          "icon": "$(eye)",
+          "when": "gemstone.connected"
         }
       ]
     },

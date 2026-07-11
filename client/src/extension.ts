@@ -482,6 +482,18 @@ export function activate(context: vscode.ExtensionContext) {
     sessionManager,
     globalState: context.globalState,
   });
+  // Drive the `gemstone.connected` context key from whether any session is
+  // live. Session-scoped explorers (Inspector, and the forthcoming stone class
+  // hierarchy) are shown via `when: gemstone.connected`, so the sidebar fills in
+  // once you log in and empties back to just the launcher when you log out.
+  const applyConnectedContext = () =>
+    vscode.commands.executeCommand(
+      'setContext',
+      'gemstone.connected',
+      sessionManager.getSessions().length > 0,
+    );
+  applyConnectedContext();
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       GemstoneLoginLauncherProvider.viewType,
@@ -489,7 +501,10 @@ export function activate(context: vscode.ExtensionContext) {
       { webviewOptions: { retainContextWhenHidden: true } },
     ),
     // Reflect login/logout and session-selection changes immediately.
-    sessionManager.onDidChangeSelection(() => loginLauncherProvider.refresh()),
+    sessionManager.onDidChangeSelection(() => {
+      loginLauncherProvider.refresh();
+      applyConnectedContext();
+    }),
   );
 
   context.subscriptions.push(
