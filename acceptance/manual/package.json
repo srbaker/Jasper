@@ -1,0 +1,27 @@
+{
+  "name": "jasper-living-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Living-documentation generator: turns a Cucumber JSON test feed into an Astro Starlight user manual. Engine + components are generic and extractable; only src/content is product-specific.",
+  "scripts": {
+    "generate": "tsx src/engine/cli.ts",
+    "build": "astro build",
+    "preview": "astro preview",
+    "pdf": "node scripts/build-pdf.mjs",
+    "manual": "npm run generate && npm run build && npm run pdf",
+    "dev": "astro dev",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.0.7",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+
+# Generated from the Cucumber feed by `npm run generate` — not source.
+src/generated/
+src/content/docs/features/
+public/screens/
+
+# PDF output
+manual.pdf
