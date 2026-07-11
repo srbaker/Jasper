@@ -31,8 +31,12 @@ export default defineConfig({
   reporter: [
     ['list'],
     // The living-documentation feed. Screenshots attached during a step ride in
-    // as that step's `embeddings`.
-    cucumberReporter('json', { outputFile: 'cucumber-report/report.json' }),
+    // as that step's `embeddings` — but the json reporter defaults
+    // skipAttachments:true, so we must explicitly opt in to keep them.
+    cucumberReporter('json', {
+      outputFile: 'cucumber-report/report.json',
+      skipAttachments: false,
+    }),
     ['html', { open: 'never', outputFolder: 'playwright-report' }],
   ],
   use: {
