@@ -75,6 +75,7 @@ import { DatabaseManager } from './databaseManager';
 import { DatabaseTreeProvider, DatabaseNode } from './databaseTreeProvider';
 import { ProcessManager } from './processManager';
 import { GemstoneManagerPanel } from './gemstoneManager';
+import { GemstoneLoginLauncherProvider } from './gemstoneLoginLauncher';
 import { openMcpInspector } from './openMcpInspector';
 import { McpSocketServer, writeClaudeDesktopMcpConfig } from './mcpSocketServer';
 import { writeClaudeCodeUserMcpConfig } from './claudeCodeUserMcpConfig';
@@ -470,14 +471,32 @@ export function activate(context: vscode.ExtensionContext) {
   sessionManager = new SessionManager();
   const treeProvider = new LoginTreeProvider(storage, sessionManager);
   // The "Logins & Sessions" sidebar tree was removed; login/session management
-  // now lives in the GemStone Manager (and a forthcoming launch-style login
-  // selector). treeProvider is retained because the login editor and many
-  // commands still drive it (its refresh() is a no-op without a view).
+  // now lives in the GemStone Manager and the Login Launcher below. treeProvider
+  // is retained because the login editor and many commands still drive it (its
+  // refresh() is a no-op without a view).
+
+  // Login Launcher — the Run-and-Debug-style login selector pinned to the top of
+  // the GemStone sidebar (the first sidebar webview view).
+  const loginLauncherProvider = new GemstoneLoginLauncherProvider({
+    storage,
+    sessionManager,
+    globalState: context.globalState,
+  });
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      GemstoneLoginLauncherProvider.viewType,
+      loginLauncherProvider,
+      { webviewOptions: { retainContextWhenHidden: true } },
+    ),
+    // Reflect login/logout and session-selection changes immediately.
+    sessionManager.onDidChangeSelection(() => loginLauncherProvider.refresh()),
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('gemstone.logins')) {
         treeProvider.refresh();
+        loginLauncherProvider.refresh();
       }
       if (e.affectsConfiguration('gemstone.maxEnvironment')) {
         // maxEnvironment changes are picked up on next browser refresh

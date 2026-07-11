@@ -312,6 +312,11 @@
     "views": {
       "gemstone": [
         {
+          "id": "gemstoneLoginLauncher",
+          "name": "Login",
+          "type": "webview"
+        },
+        {
           "id": "gemstoneRowan",
           "name": "Rowan",
           "type": "tree",
@@ -1043,6 +1048,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "gemstone.openManager",
+          "when": "view == gemstoneLoginLauncher",
+          "group": "navigation@0"
+        },
         {
           "command": "gemstone.openManager",
           "when": "view == gemstoneRowan",
