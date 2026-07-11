@@ -5,12 +5,36 @@ vi.mock('vscode', () => import('../__mocks__/vscode'));
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import { __setWorkspaceFolders } from '../__mocks__/vscode';
 import {
   RowanProjectTreeProvider,
   RowanProjectPackageItem,
+  RowanProjectClassItem,
+  RowanProjectMethodItem,
   RowanProjectMessageItem,
 } from '../rowanProjectView';
+
+// Write a Tonel class file into a package directory of a project.
+function writeClass(projectDir: string, pkg: string, fileName: string, body: string): void {
+  const pdir = path.join(projectDir, 'src', pkg);
+  fs.mkdirSync(pdir, { recursive: true });
+  fs.writeFileSync(path.join(pdir, fileName), body);
+}
+
+const THING_CLASS = [
+  "Class { #name : 'Thing', #superclass : 'Object', #category : 'Pkg-Core' }",
+  '',
+  "{ #category : 'accessing' }",
+  'Thing >> value [',
+  '\t^ 42',
+  ']',
+  '',
+  "{ #category : 'instance creation' }",
+  'Thing class >> named: aName [',
+  '\t^ self new',
+  ']',
+].join('\n');
 
 const dirs: string[] = [];
 
@@ -95,5 +119,66 @@ describe('RowanProjectTreeProvider', () => {
     provider.refresh();
 
     expect(provider.getChildren().map(r => r.label)).toEqual(['One', 'Two']);
+  });
+});
+
+describe('RowanProjectTreeProvider drill-down', () => {
+  function providerFor(dir: string): RowanProjectTreeProvider {
+    __setWorkspaceFolders([dir]);
+    return new RowanProjectTreeProvider();
+  }
+
+  it('makes a package with class files expandable, and one without a leaf', () => {
+    const dir = makeProjectDir(['With-Core', 'Empty-Core']);
+    writeClass(dir, 'With-Core', 'Thing.class.st', THING_CLASS);
+    fs.writeFileSync(path.join(dir, 'src', 'Empty-Core', 'properties.st'), '{ }');
+
+    const [empty, withClasses] = providerFor(dir).getChildren() as RowanProjectPackageItem[];
+
+    expect(withClasses.collapsibleState).toBe(vscode.TreeItemCollapsibleState.Collapsed);
+    expect(empty.collapsibleState).toBe(vscode.TreeItemCollapsibleState.None);
+  });
+
+  it('lists a package’s classes and extensions, sorted, ignoring metadata files', () => {
+    const dir = makeProjectDir(['Pkg-Core']);
+    writeClass(dir, 'Pkg-Core', 'Thing.class.st', THING_CLASS);
+    writeClass(dir, 'Pkg-Core', 'Object.extension.st', "Extension { #name : 'Object' }\n\n{ #category : '*Pkg' }\nObject >> asThing [\n\t^ self\n]");
+    fs.writeFileSync(path.join(dir, 'src', 'Pkg-Core', 'package.st'), "Package { #name : 'Pkg-Core' }");
+
+    const provider = providerFor(dir);
+    const [pkg] = provider.getChildren() as RowanProjectPackageItem[];
+    const classes = provider.getChildren(pkg) as RowanProjectClassItem[];
+
+    expect(classes.map(c => c.label)).toEqual(['Object', 'Thing']);
+    expect(classes[0].description).toBe('extension');
+    expect(classes[1].description).toBeUndefined();
+  });
+
+  it('lists a class’s methods, instance-side before class-side', () => {
+    const dir = makeProjectDir(['Pkg-Core']);
+    writeClass(dir, 'Pkg-Core', 'Thing.class.st', THING_CLASS);
+
+    const provider = providerFor(dir);
+    const [pkg] = provider.getChildren() as RowanProjectPackageItem[];
+    const [cls] = provider.getChildren(pkg) as RowanProjectClassItem[];
+    const methods = provider.getChildren(cls) as RowanProjectMethodItem[];
+
+    expect(methods.map(m => [m.label, m.description])).toEqual([
+      ['value', undefined],
+      ['named:', 'class'],
+    ]);
+  });
+
+  it('opens the class file at the method’s line when a method row is clicked', () => {
+    const dir = makeProjectDir(['Pkg-Core']);
+    writeClass(dir, 'Pkg-Core', 'Thing.class.st', THING_CLASS);
+
+    const provider = providerFor(dir);
+    const [pkg] = provider.getChildren() as RowanProjectPackageItem[];
+    const [cls] = provider.getChildren(pkg) as RowanProjectClassItem[];
+    const [firstMethod] = provider.getChildren(cls) as RowanProjectMethodItem[];
+
+    expect(firstMethod.command?.command).toBe('vscode.open');
+    expect(firstMethod.command?.arguments?.[0].fsPath).toBe(path.join(dir, 'src', 'Pkg-Core', 'Thing.class.st'));
   });
 });

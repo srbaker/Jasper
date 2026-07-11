@@ -32,6 +32,37 @@ export interface RowanWorkspaceProject {
   packages: RowanProjectPackage[];
 }
 
+// A Tonel class file inside a package: a class definition (`*.class.st`) or an
+// extension that adds methods to a class defined elsewhere (`*.extension.st`).
+export interface RowanProjectClass {
+  name: string;
+  // Absolute path to the .class.st / .extension.st file.
+  file: string;
+  kind: 'class' | 'extension';
+}
+
+// The Tonel class files directly inside a package directory, sorted by name.
+// The package.st / properties.st metadata files (and any subdirectories) are
+// ignored. Empty when the directory is absent or unreadable.
+export function listPackageClasses(packageDir: string): RowanProjectClass[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(packageDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const classes: RowanProjectClass[] = [];
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    if (e.name.endsWith('.class.st')) {
+      classes.push({ name: e.name.slice(0, -'.class.st'.length), file: path.join(packageDir, e.name), kind: 'class' });
+    } else if (e.name.endsWith('.extension.st')) {
+      classes.push({ name: e.name.slice(0, -'.extension.st'.length), file: path.join(packageDir, e.name), kind: 'extension' });
+    }
+  }
+  return classes.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // A project's on-disk marker: the project spec at rowan/project.ston.
 const PROJECT_SPEC_FILE = path.join('rowan', 'project.ston');
 // The spec's content signature. Matched as a prefix so RwProjectSpecificationV2
