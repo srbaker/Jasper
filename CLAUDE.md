@@ -33,12 +33,9 @@ npm run package          # produce .vsix package
 npm run dev:fresh        # launch the extension in a throwaway editor window (see below)
 npm run serve:seaside    # start a Seaside server gem for the loaded hello app (see below)
 
-# End-user acceptance tests (Playwright drives a real editor window; see acceptance/)
-npm run test:acceptance         # run the specs locally (opens a window — macOS can't headless it)
-npm run test:acceptance:docker  # run them headless in a Linux container (no window)
-npm run test:acceptance:rowan   # the Rowan add-from-git → load e2e (in-container stone)
-npm run test:acceptance:seaside # the Seaside Hello World e2e (install → serve → integrated browser)
-npm run test:acceptance:report  # open the HTML report / flip through per-step screenshots
+# Acceptance tests + living documentation (Gherkin → sandboxed VS Code; see acceptance/)
+npm run test:acceptance         # run the Gherkin scenarios (sandboxed VS Code, off-screen on macOS)
+npm run test:acceptance:manual  # regenerate the user manual (Astro site + PDF) from the last run
 ```
 
 ### Running the extension in a clean slate

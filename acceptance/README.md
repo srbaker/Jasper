@@ -1,56 +1,49 @@
-# Acceptance tests
+# Jasper acceptance suite — living documentation
 
-End-user acceptance tests that drive a real VS Code window — with the Jasper
-extension loaded — using [Playwright](https://playwright.dev)'s Electron support.
-Where the unit tests call the extension's API, these click the actual UI: the
-GemStone activity-bar item, the tree views, the command palette.
+Gherkin-authored, UI-driven acceptance tests that drive a **sandboxed VS Code**
+with the Jasper extension loaded from source, and whose output is a
+screenshot-rich **user manual** (an Astro Starlight site + PDF). The same run that
+verifies behaviour produces the documentation — so the manual can't drift from the
+product.
 
-They are slow and GUI-bound, so they are **not** part of `npm test`.
-
-## Running headless (recommended)
-
-macOS has no headless VS Code — a real window is created and focused during the
-editor's own startup, before Playwright can intervene, so a *local* run always
-flashes a window and steals focus. To run without anything appearing on your
-desktop, run inside the Linux container, where VS Code renders to a virtual X
-display (this is also how CI runs it):
+## Run it
 
 ```sh
-npm run test:acceptance:docker              # builds the image and runs the suite
-npm run test:acceptance:docker -- isolation # run a single spec
-npm run test:acceptance:report              # flip through the per-step screenshots
+mise install            # once: pins node for this workspace (no Java, no Docker)
+npm install             # once
+npm test                # bddgen → Playwright drives VS Code → Cucumber JSON feed
+npm run manual          # generate the manual (Astro site + PDF) from the last run
 ```
 
-The report and traces are written back to the host under `acceptance/`, so the
-report command works the same whether the run was local or containerised.
+- On macOS the editor runs **off-screen** (accessory app) — no window appears.
+- Headless CI: `npm run test:ci` (`xvfb-run`).
+- The editor is **sandboxed**: pinned VS Code version, throwaway user-data /
+  extensions / `HOME` / `TMPDIR` / `XDG_*`, a minimal env allowlist (no host
+  config leaks in), in-memory secret storage (never the login Keychain), telemetry
+  off. See `fixtures/vscode.ts`.
 
-## Running locally
+## Pipeline
 
-Only do this when you've stepped away — every local run opens a VS Code window.
-
-```sh
-npm run compile            # the extension must be built first
-npm run test:acceptance    # launches VS Code and runs the specs
-npm run test:acceptance:report   # flip through the per-step screenshots
+```
+features/*.feature (Gherkin)
+  → playwright-bdd (bddgen)                       # compile to Playwright specs
+  → Playwright _electron + @vscode/test-electron  # sandboxed VS Code + Jasper
+  → AfterStep screenshot → step embeddings        # per-step evidence
+  → cucumberReporter('json') → cucumber-report/   # the data contract
+  → manual/ (generator → Astro Starlight → PDF)   # the living-documentation manual
 ```
 
-## Flipping through screenshots
+## Layout
 
-`trace: 'on'` records every action with a before/after DOM snapshot. After a run,
-`npm run test:acceptance:report` opens the Playwright HTML report; open a test and
-click into its trace to scrub the timeline and see the screenshot at each step —
-this is the "flip through screenshots" interface, no video required.
+| Path | Role |
+|---|---|
+| `features/` | `*.feature` — the Gherkin scenarios (the manual's source) |
+| `steps/` | step definitions, thin over the page objects |
+| `fixtures/` | Playwright fixtures — `vscode.ts` (sandboxed launch), `test.ts` |
+| `support/` | the per-step screenshot hook |
+| `pageobjects/` | thin POM over the workbench (`.monaco-*` / ARIA locators) |
+| `manual/` | the extractable living-documentation generator (own README) |
 
-## How VS Code is launched
-
-`helpers/vscode.ts` downloads a pinned VS Code build (via `@vscode/test-electron`),
-resolves its Electron binary, and launches it with Playwright pointed at this repo
-as the extension-development path. Because Jasper is a native (koffi/GCI) extension
-it runs only in desktop VS Code, not the web build.
-
-## Scope
-
-The first specs cover the simplest workflow — open VS Code, find the GemStone view,
-see its sections — and need no running stone. Stone-backed scenarios (connect, load
-a Rowan project, Hello World) boot from a pre-provisioned snapshot extent and come
-later.
+Stone-backed scenarios expect a test stone from the repo's
+`npm run test:server:start` (writes `client/.env.test`); scenarios tagged
+`@stone` skip when none is provisioned.
