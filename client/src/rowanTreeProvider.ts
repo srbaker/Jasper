@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RowanRepoRegistry, TrackedRepo } from './rowanRepos';
+import { isRowanProjectRoot } from './rowanProject';
 import { findRowanLoadSpecs } from './rowanLoad';
 import { ActiveSession } from './sessionManager';
 import { listRowanProjects, diffRowanProject, getGemCacheKB, RowanProject, RowanDiff, RowanDiffOp } from './browserQueries';
@@ -67,16 +68,22 @@ export class RowanRepoItem extends vscode.TreeItem {
      * or no minimum is declared.
      */
     public readonly underProvisionedMinKB?: number,
+    /** The open workspace-root project. Gets a distinct icon/marker. */
+    public readonly isWorkspace = false,
+    /** False for a workspace repo that isn't explicitly tracked (no untrack). */
+    public readonly isTracked = true,
   ) {
     super(repo.name, vscode.TreeItemCollapsibleState.None);
     this.id = `rowan-repo-${repo.path}`;
-    this.description = missing
+    const detail = missing
       ? 'missing on disk'
       : specNames.length === 0
         ? 'no load spec found'
         : specNames.join(', ') + (loaded ? ' · loaded' : '');
+    this.description = isWorkspace && !missing ? `${detail} · workspace` : detail;
     this.tooltip = [
       repo.path,
+      isWorkspace ? 'The open workspace project.' : undefined,
       repo.gitUrl ? `from ${repo.gitUrl}` : undefined,
       missing ? 'The tracked directory no longer exists.' : undefined,
       underProvisionedMinKB
@@ -84,16 +91,21 @@ export class RowanRepoItem extends vscode.TreeItem {
         : undefined,
     ].filter(Boolean).join('\n');
     // A too-small gem cache gets the warning triangle even on a valid repo —
-    // loading would overflow, so it's flagged before you try.
+    // loading would overflow, so it's flagged before you try. The workspace
+    // project gets a root-folder icon so it reads as "this project".
     this.iconPath = new vscode.ThemeIcon(
-      missing || underProvisionedMinKB ? 'warning' : 'repo',
+      missing || underProvisionedMinKB ? 'warning' : isWorkspace ? 'root-folder' : 'repo',
     );
     // Loadable only when the checkout exists and holds at least one spec.
     // A `Git` suffix marks a checkout with a known git origin (shown as
     // "from <url>"); the package.json menus key the Load / Stop-Tracking
     // actions off these contextValues (`=~ /^rowanRepo/` matches them all).
+    // An untracked workspace repo gets a `Workspace` variant so it offers Load
+    // but not Stop-Tracking (there's nothing tracked to stop).
     if (missing) {
       this.contextValue = 'rowanRepoMissing';
+    } else if (isWorkspace && !isTracked) {
+      this.contextValue = specNames.length > 0 ? 'rowanRepoWorkspace' : 'rowanRepoWorkspaceNoSpec';
     } else {
       const base = specNames.length > 0 ? 'rowanRepo' : 'rowanRepoNoSpec';
       this.contextValue = repo.gitUrl ? `${base}Git` : base;
@@ -234,10 +246,14 @@ export class RowanTreeProvider implements vscode.TreeDataProvider<RowanTreeNode>
 
   getChildren(element?: RowanTreeNode): RowanTreeNode[] {
     if (!element) {
-      // A bare start (nothing tracked, no session) renders as viewsWelcome
-      // content instead of three empty sections — that's where the real
-      // "Add Rowan Repository" button lives (package.json viewsWelcome).
-      if (this.workspaceRepos().length === 0 && !this.sessions.getSession()) {
+      // A bare start (nothing tracked, no workspace project, no session) renders
+      // as viewsWelcome content instead of three empty sections — that's where
+      // the real "Add Rowan Repository" button lives (package.json viewsWelcome).
+      if (
+        this.workspaceRepos().length === 0 &&
+        !this.hasWorkspaceProject() &&
+        !this.sessions.getSession()
+      ) {
         return [];
       }
       return [
@@ -329,8 +345,24 @@ export class RowanTreeProvider implements vscode.TreeDataProvider<RowanTreeNode>
     );
   }
 
+  /** True when an open workspace folder is itself a Rowan project. */
+  private hasWorkspaceProject(): boolean {
+    return (vscode.workspace.workspaceFolders ?? []).some(f => isRowanProjectRoot(f.uri.fsPath));
+  }
+
   private repositoryChildren(): RowanTreeNode[] {
-    const repos = this.workspaceRepos();
+    const tracked = this.workspaceRepos();
+    const trackedPaths = new Set(tracked.map(r => r.path));
+    // The open workspace-root project always appears here, even when it hasn't
+    // been explicitly tracked — marked as the workspace repo.
+    const workspaceRoots = (vscode.workspace.workspaceFolders ?? [])
+      .map(f => f.uri.fsPath)
+      .filter(root => isRowanProjectRoot(root));
+    const workspaceSet = new Set(workspaceRoots);
+    const synthesized: TrackedRepo[] = workspaceRoots
+      .filter(root => !trackedPaths.has(root))
+      .map(root => ({ name: path.basename(root), path: root }));
+    const repos = [...tracked, ...synthesized];
     if (repos.length === 0) {
       const item = new RowanMessageItem(
         'rowanEmpty', 'No repositories tracked — add one…', '',
@@ -342,7 +374,7 @@ export class RowanTreeProvider implements vscode.TreeDataProvider<RowanTreeNode>
     return repos
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map(repo => this.describe(repo, loadedNames));
+      .map(repo => this.describe(repo, loadedNames, workspaceSet.has(repo.path), trackedPaths.has(repo.path)));
   }
 
   private loadedChildren(): RowanTreeNode[] {
@@ -398,9 +430,9 @@ export class RowanTreeProvider implements vscode.TreeDataProvider<RowanTreeNode>
       : new Set();
   }
 
-  private describe(repo: TrackedRepo, loadedNames: Set<string>): RowanRepoItem {
+  private describe(repo: TrackedRepo, loadedNames: Set<string>, isWorkspace = false, isTracked = true): RowanRepoItem {
     if (!fs.existsSync(repo.path)) {
-      return new RowanRepoItem(repo, [], true, false);
+      return new RowanRepoItem(repo, [], true, false, undefined, isWorkspace, isTracked);
     }
     const specs = findRowanLoadSpecs(repo.path);
     const specNames = specs.map(s => s.name);
@@ -412,7 +444,7 @@ export class RowanTreeProvider implements vscode.TreeDataProvider<RowanTreeNode>
     const underProvisioned = gemKB !== undefined && declaredMin > gemKB
       ? declaredMin
       : undefined;
-    return new RowanRepoItem(repo, specNames, false, loaded, underProvisioned);
+    return new RowanRepoItem(repo, specNames, false, loaded, underProvisioned, isWorkspace, isTracked);
   }
 
   // The connected gem's temp-object cache (KB), probed once per refresh. null
