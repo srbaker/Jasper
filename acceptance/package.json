@@ -9,6 +9,7 @@
     "test": "bddgen && playwright test --grep-invert \"@tricky|@download\"",
     "test:tricky": "bddgen && playwright test --grep @tricky",
     "test:download": "bddgen && playwright test --grep @download",
+    "test:docker": "bash scripts/docker-test.sh",
     "test:ci": "xvfb-run -a npm test",
     "manual": "npm --prefix manual run manual",
     "manual:build": "npm --prefix manual run build"
