@@ -1,27 +1,33 @@
 /**
- * Launch an isolated VS Code (Electron) with the Jasper extension loaded from
- * source, driven over CDP by Playwright.
+ * Launch the isolated editor-under-test — official VS Code via
+ * `@vscode/test-electron`, pinned for reproducibility — with the Jasper
+ * extension loaded from source, driven over CDP by Playwright.
  *
- * This is the isolation logic salvaged from the previous acceptance harness
- * (`helpers/vscode.ts`) — the part that was genuinely good — refactored from a
- * per-test fixture into a plain launcher so it can be shared by a worker-scoped
- * fixture (see `fixtures/test.ts`).
+ * The isolation logic here is the good part salvaged from the previous harness,
+ * hardened into a proper sandbox of the developer's machine. Nothing about this
+ * run reads or writes the real user's configuration, and nothing pops a dialog:
  *
- * Isolated from the developer's machine, not just from VS Code's settings:
  *   - a fresh user-data dir (no personal settings, theme, or window state)
  *   - a fresh extensions dir (only Jasper loads)
  *   - a throwaway workspace folder
- *   - HOME pointed at the profile, so `~/.claude.json` and `~/Documents/GemStone`
- *     resolve to empty throwaway paths (no MCP write to the real config)
- *   - `gemstone.rootPath` at an empty temp dir, so the Versions and Databases
- *     panels never surface real GemStone installs
- *   - secrets kept in an in-profile file store, never the macOS login keychain
+ *   - a **minimal env allowlist** — the process does NOT inherit the developer's
+ *     shell environment (tokens, GS_ vars, GCI paths, etc.); it sees only
+ *     PATH/locale plus throwaway HOME, TMPDIR and XDG dirs inside the profile
+ *   - **`--use-inmemory-secretstorage`** — the flag VS Code's own integration
+ *     tests use so secret storage stays in-memory and NEVER touches the macOS
+ *     login Keychain. This is the real fix for the "enter your keychain
+ *     password/code" dialog: on macOS `--password-store=basic` is a Linux-only
+ *     switch and does not stop Electron's safeStorage from hitting the Keychain.
+ *   - telemetry and the crash reporter disabled (flag + workspace setting)
+ *   - `gemstone.rootPath` at an empty temp dir, so the Versions/Databases panels
+ *     never surface real GemStone installs
+ *
+ * Reproducible: the VS Code version is pinned, the settings are fixed, and the
+ * environment is constructed from scratch — so the run is identical everywhere.
  *
  * Non-disruptive on macOS: the app is switched to the "accessory" activation
- * policy (the runtime equivalent of LSUIElement) and its window moved off every
- * display, so it never steals focus or sits on the visible desktop. Playwright
- * drives it over CDP, which is unaffected. This is what lets the suite run on a
- * developer's Mac without flashing windows — no Docker required.
+ * policy (no Dock icon, never the active app) and its window moved off every
+ * display, so it never steals focus or appears on the desktop.
  */
 import { _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import { downloadAndUnzipVSCode } from '@vscode/test-electron';
@@ -32,8 +38,15 @@ import * as path from 'path';
 /** Repo root — the extension-development path VS Code loads Jasper from. */
 export const repoRoot = path.resolve(__dirname, '..', '..');
 
-/** VS Code version the suite pins (channel or explicit version). */
-export const VSCODE_VERSION = 'stable';
+/** Pinned VS Code version. Bump deliberately; never track "stable". */
+export const VSCODE_VERSION = '1.128.0';
+
+/**
+ * Environment variables allowed through to the editor. Everything else in the
+ * developer's shell env is dropped so nothing machine-specific leaks in. HOME,
+ * TMPDIR, and the XDG_* dirs are then overridden to throwaway locations.
+ */
+const ENV_ALLOWLIST = ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', '__CF_USER_TEXT_ENCODING'];
 
 export interface LaunchedVSCode {
   app: ElectronApplication;
@@ -63,6 +76,27 @@ function electronBinary(vscodeCliPath: string): string {
   return vscodeCliPath;
 }
 
+/** Build a minimal, machine-independent environment rooted at the profile. */
+function sandboxedEnv(profile: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of ENV_ALLOWLIST) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  const tmp = path.join(profile, 'tmp');
+  const xdg = (name: string) => path.join(profile, 'xdg', name);
+  fs.mkdirSync(tmp, { recursive: true });
+  for (const dir of ['config', 'data', 'cache', 'state']) fs.mkdirSync(xdg(dir), { recursive: true });
+  env.HOME = profile;
+  env.USERPROFILE = profile;
+  env.TMPDIR = tmp;
+  env.XDG_CONFIG_HOME = xdg('config');
+  env.XDG_DATA_HOME = xdg('data');
+  env.XDG_CACHE_HOME = xdg('cache');
+  env.XDG_STATE_HOME = xdg('state');
+  return env;
+}
+
 export async function launchVSCode(options: LaunchOptions = {}): Promise<LaunchedVSCode> {
   const vscodeCliPath = await downloadAndUnzipVSCode(VSCODE_VERSION);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jasper-acceptance-'));
@@ -73,25 +107,16 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   const settings = {
     'gemstone.rootPath': gemstoneRoot,
     'gemstone.mcp.registerWithClaudeDesktop': false,
+    'telemetry.telemetryLevel': 'off',
     ...options.workspaceSettings,
   };
   const dotVscode = path.join(workspace, '.vscode');
   fs.mkdirSync(dotVscode, { recursive: true });
   fs.writeFileSync(path.join(dotVscode, 'settings.json'), JSON.stringify(settings, null, 2));
 
-  // Clean env: drop ELECTRON_RUN_AS_NODE (it makes VS Code's Electron boot as
-  // plain Node and reject every CLI flag), and point HOME at the throwaway
-  // profile so nothing home-relative touches the real machine.
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
-  }
-  env.HOME = profile;
-  env.USERPROFILE = profile;
-
   const app = await electron.launch({
     executablePath: electronBinary(vscodeCliPath),
-    env,
+    env: sandboxedEnv(profile),
     args: [
       `--extensionDevelopmentPath=${repoRoot}`,
       `--user-data-dir=${path.join(profile, 'user-data')}`,
@@ -100,10 +125,12 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
       '--skip-welcome',
       '--skip-release-notes',
       '--disable-updates',
+      '--disable-telemetry',
+      '--disable-crash-reporter',
+      // Secret storage stays in-memory — never the macOS login Keychain, so the
+      // run never prompts for a keychain password/code. (VS Code's own test flag.)
+      '--use-inmemory-secretstorage',
       '--no-sandbox',
-      // Keep secrets in an in-profile file store instead of the macOS login
-      // keychain, which --user-data-dir does NOT isolate.
-      '--password-store=basic',
       workspace,
     ],
   });
