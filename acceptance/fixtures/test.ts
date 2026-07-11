@@ -16,11 +16,27 @@ import { test as base } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { launchVSCode } from './vscode';
+import {
+  provisionStone,
+  stopStone,
+  stoneInstalled,
+  loginSettings,
+  type TestStone,
+  type StoneSpec,
+} from './stone';
 
 /** Persistent, git-ignored cache for the "Download GemStone" chapter. */
 const DOWNLOAD_CACHE = path.resolve(__dirname, '..', '.download-cache', 'gemstone-root');
 
+/** The GemStone version the stone-backed chapters provision. */
+const STONE_VERSION = '3.7.5';
+
 export type AcceptanceTestFixtures = {
+  /**
+   * A provisioned acceptance stone for `@stone` scenarios (null otherwise).
+   * `@stone:rowan` uses the shipped Rowan extent; plain `@stone` uses a bare one.
+   */
+  stone: TestStone | null;
   /** The workbench page for this scenario, ready to drive. */
   window: Page;
   /**
@@ -32,12 +48,33 @@ export type AcceptanceTestFixtures = {
 };
 
 export const test = base.extend<AcceptanceTestFixtures>({
-  window: async ({ $tags }, use) => {
+  stone: async ({ $tags }, use) => {
+    if (!$tags.includes('@stone')) {
+      await use(null);
+      return;
+    }
+    if (!stoneInstalled(STONE_VERSION)) {
+      test.skip(
+        true,
+        `GemStone ${STONE_VERSION} is not installed for acceptance — provision it first ` +
+          `(bash acceptance/scripts/provision-stone.sh ${STONE_VERSION} bare)`,
+      );
+      await use(null);
+      return;
+    }
+    const spec: StoneSpec = $tags.includes('@stone:rowan') ? 'rowan' : 'bare';
+    const stone = provisionStone(STONE_VERSION, spec);
+    await use(stone);
+    stopStone(STONE_VERSION);
+  },
+
+  window: async ({ $tags, stone }, use) => {
     const bare = $tags.includes('@install') || $tags.includes('@bare');
     const vscode = await launchVSCode({
       development: !bare,
       workspaceTrust: $tags.includes('@trust'),
       gemstoneRootPath: $tags.includes('@download') ? DOWNLOAD_CACHE : undefined,
+      workspaceSettings: stone ? loginSettings(stone) : undefined,
     });
     await use(vscode.window);
     await vscode.dispose();

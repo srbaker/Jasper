@@ -19,3 +19,6 @@ blob-report/
 # The Cucumber JSON feed — the data contract between the harness and the manual
 # generator. Regenerated on every run; not source.
 cucumber-report/
+
+# Acceptance-owned GemStone install + stone (large; cached, reset each run)
+.stone-cache/
