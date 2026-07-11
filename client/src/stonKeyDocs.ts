@@ -19,7 +19,7 @@ export interface KeyDoc {
   pathKind?: 'dir' | 'file';
 }
 
-export const STON_KEY_DOCS: Record<string, KeyDoc> = {
+const STON_KEY_DOCS: Record<string, KeyDoc> = {
   // ── project spec (RwProjectSpecificationV3 / project.ston) ──
   specName: { description: "This specification's name. In project.ston it is always 'project'." },
   projectVersion: { description: 'The project version — a semantic version string like 1.0.0.' },
@@ -74,7 +74,7 @@ export const STON_KEY_DOCS: Record<string, KeyDoc> = {
 
 // The keys each spec class may carry, so the editor can list available-but-unset
 // options (with their defaults) alongside the ones the file actually sets.
-export const STON_SCHEMAS: Record<string, string[]> = {
+const STON_SCHEMAS: Record<string, string[]> = {
   RwProjectSpecificationV3: [
     'specName', 'projectVersion', 'projectSpecPath', 'componentsPath', 'packagesPath',
     'projectsPath', 'specsPath', 'packageFormat', 'packageConvention', 'comment',
@@ -113,7 +113,7 @@ export function isSimplifiedKey(className: string | null, key: string): boolean 
 
 // The keys a spec of a given class must carry a non-empty value for. Editing one
 // to empty — or omitting it — is flagged.
-export const REQUIRED_KEYS: Record<string, string[]> = {
+const REQUIRED_KEYS: Record<string, string[]> = {
   RwProjectSpecificationV3: ['specName'],
   RwProjectSpecificationV2: ['specName'],
   RwLoadSpecificationV2: ['projectName'],
