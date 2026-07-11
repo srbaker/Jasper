@@ -56,7 +56,9 @@ case "$EXTENT_KIND" in
 esac
 [[ -f "$SRC" ]] || { echo "shipped extent not found: $SRC" >&2; exit 1; }
 mkdir -p "$GEMSTONE_DATA_DIR"
-rm -f "${GEMSTONE_DATA_DIR}/extent0.dbf"
+# Remove the old extent AND its transaction logs — stale tranlogs from a prior
+# run (esp. a different extent) mismatch the fresh extent and crash startup.
+rm -f "${GEMSTONE_DATA_DIR}/extent0.dbf" "${GEMSTONE_DATA_DIR}"/tranlog*.dbf
 copydbf "$SRC" "${GEMSTONE_DATA_DIR}/extent0.dbf" >&2
 chmod 600 "${GEMSTONE_DATA_DIR}/extent0.dbf"
 
