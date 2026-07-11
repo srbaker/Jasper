@@ -19,9 +19,11 @@ import * as fs from 'fs';
 
 import { SysadminStorage } from './sysadminStorage';
 import { VersionManager } from './versionManager';
-import { ProcessManager } from './processManager';
+import { ProcessManager, versionsMatch } from './processManager';
+import { DatabaseManager } from './databaseManager';
 import { getSharedMemory } from './sharedMemoryTreeProvider';
 import { GemStoneVersion, GemStoneDatabase } from './sysadminTypes';
+import { GemStoneLogin, loginLabel } from './loginTypes';
 
 const gemstoneManagerJs = fs.readFileSync(
   path.join(__dirname, '..', 'src', 'gemstoneManager.js'),
@@ -36,6 +38,8 @@ export interface GemstoneManagerDeps {
   storage: SysadminStorage;
   versionManager: VersionManager;
   processManager: ProcessManager;
+  databaseManager: DatabaseManager;
+  getLogins: () => GemStoneLogin[];
 }
 
 // ── Wire types shared with gemstoneManager.js ───────────────────────────────
@@ -64,14 +68,33 @@ interface VersionRow {
   bundled?: boolean;
 }
 
+interface ProcInfo {
+  type: 'stone' | 'netldi';
+  name: string;
+  pid: number;
+  port?: number;
+  status: string;
+  responding: boolean;
+}
+
+interface LoginInfo {
+  label: string;
+  user: string;
+  stone: string;
+  host: string;
+}
+
 interface DatabaseRow {
   dirName: string;
   version: string;
   stoneName: string;
   ldiName: string;
   baseExtent: string;
+  path: string;
   stoneRunning: boolean;
   netldiRunning: boolean;
+  processes: ProcInfo[];
+  logins: LoginInfo[];
 }
 
 interface ManagerState {
@@ -94,6 +117,8 @@ type Inbound =
   | { command: 'registerLocalVersion' }
   | { command: 'createDatabase' }
   | { command: 'deleteDatabase'; dirName: string }
+  | { command: 'startDatabase'; dirName: string }
+  | { command: 'stopDatabase'; dirName: string }
   | { command: 'startStone'; dirName: string }
   | { command: 'stopStone'; dirName: string }
   | { command: 'startNetldi'; dirName: string }
@@ -101,6 +126,7 @@ type Inbound =
   | { command: 'replaceExtent'; dirName: string }
   | { command: 'openDbTerminal'; dirName: string }
   | { command: 'openDbInFinder'; dirName: string }
+  | { command: 'openDbSubfolder'; dirName: string; folder: string }
   | { command: 'createLoginFromDb'; dirName: string }
   | { command: 'quickSetup' }
   | { command: 'configureOs' };
@@ -187,13 +213,32 @@ export class GemstoneManagerPanel {
         return;
 
       // Databases — reuse the existing commands with a synthetic DatabaseNode.
-      case 'createDatabase':
-        await vscode.commands.executeCommand('gemstone.createDatabase');
+      // Creating a database also opens a matching login (prefilled), so a new
+      // database is immediately connectable.
+      case 'createDatabase': {
+        const db = await this.deps.databaseManager.createDatabase();
+        if (db) {
+          await vscode.commands.executeCommand('gemstone.refreshDatabases');
+          await vscode.commands.executeCommand('gemstone.createLoginFromDb', { kind: 'database', db });
+        }
         await this.postState();
         return;
+      }
       case 'deleteDatabase':
         await this.runDbCommand('gemstone.deleteDatabase', msg.dirName, 'database');
         return;
+
+      // Whole-database start/stop: brings the Stone and NetLDI up/down together.
+      case 'startDatabase':
+        await this.startStopDatabase(msg.dirName, true);
+        return;
+      case 'stopDatabase':
+        await this.startStopDatabase(msg.dirName, false);
+        return;
+      case 'openDbSubfolder':
+        await this.openDbSubfolder(msg.dirName, msg.folder);
+        return;
+
       case 'startStone':
         await this.runDbCommand('gemstone.startStone', msg.dirName, 'stone');
         return;
@@ -249,6 +294,26 @@ export class GemstoneManagerPanel {
     if (refresh) await this.postState();
   }
 
+  private async startStopDatabase(dirName: string, start: boolean): Promise<void> {
+    const db = this.lastDatabases.find((d) => d.dirName === dirName);
+    if (!db) return;
+    if (start) {
+      await vscode.commands.executeCommand('gemstone.startStone', { kind: 'stone', db });
+      await vscode.commands.executeCommand('gemstone.startNetldi', { kind: 'netldi', db });
+    } else {
+      await vscode.commands.executeCommand('gemstone.stopStone', { kind: 'stone', db });
+      await vscode.commands.executeCommand('gemstone.stopNetldi', { kind: 'netldi', db });
+    }
+    await this.postState();
+  }
+
+  private async openDbSubfolder(dirName: string, folder: string): Promise<void> {
+    const db = this.lastDatabases.find((d) => d.dirName === dirName);
+    if (!db) return;
+    const sub = folder === 'conf' ? 'conf' : 'log';
+    await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(path.join(db.path, sub)));
+  }
+
   // ── State ─────────────────────────────────────────────────────────────────
 
   private async postState(): Promise<void> {
@@ -261,17 +326,35 @@ export class GemstoneManagerPanel {
     const [os, versions] = await Promise.all([this.buildOsStatus(), this.buildVersions()]);
 
     this.deps.processManager.refreshProcesses();
+    const procs = this.deps.processManager.getProcesses();
+    const logins = this.deps.getLogins();
     const dbs = this.deps.storage.getDatabases();
     this.lastDatabases = dbs;
-    const databases: DatabaseRow[] = dbs.map((db) => ({
-      dirName: db.dirName,
-      version: db.config.version,
-      stoneName: db.config.stoneName,
-      ldiName: db.config.ldiName,
-      baseExtent: db.config.baseExtent,
-      stoneRunning: this.deps.processManager.isStoneRunning(db.config.stoneName, db.config.version),
-      netldiRunning: this.deps.processManager.isNetldiRunning(db.config.ldiName, db.config.version),
-    }));
+    const databases: DatabaseRow[] = dbs.map((db) => {
+      const cfg = db.config;
+      const dbProcs: ProcInfo[] = procs
+        .filter(
+          (p) =>
+            (p.type === 'stone' && p.name === cfg.stoneName && versionsMatch(p.version, cfg.version)) ||
+            (p.type === 'netldi' && p.name === cfg.ldiName && versionsMatch(p.version, cfg.version)),
+        )
+        .map((p) => ({ type: p.type, name: p.name, pid: p.pid, port: p.port, status: p.status, responding: p.responding }));
+      const dbLogins: LoginInfo[] = logins
+        .filter((l) => l.stone === cfg.stoneName && versionsMatch(l.version, cfg.version))
+        .map((l) => ({ label: loginLabel(l), user: l.gs_user, stone: l.stone, host: l.gem_host }));
+      return {
+        dirName: db.dirName,
+        version: cfg.version,
+        stoneName: cfg.stoneName,
+        ldiName: cfg.ldiName,
+        baseExtent: cfg.baseExtent,
+        path: db.path,
+        stoneRunning: this.deps.processManager.isStoneRunning(cfg.stoneName, cfg.version),
+        netldiRunning: this.deps.processManager.isNetldiRunning(cfg.ldiName, cfg.version),
+        processes: dbProcs,
+        logins: dbLogins,
+      };
+    });
 
     return {
       platform: this.deps.storage.getPlatformKey() ?? process.platform,
@@ -533,6 +616,59 @@ body {
 .svc .svc-state { font-weight: 600; }
 .svc .svc-state.on { color: var(--gm-ok); }
 .svc .svc-state.offc { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.dim { color: var(--vscode-descriptionForeground, #9d9d9d); }
+
+/* Expandable database items */
+.db-item { border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.16)); border-radius: 6px; margin: 8px 0; overflow: hidden; }
+.db-item[open] { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.04)); }
+.db-summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+  padding: 9px 12px; list-style: none;
+}
+.db-summary::-webkit-details-marker { display: none; }
+.db-summary::before {
+  content: ""; width: 0; height: 0; flex: none;
+  border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .12s ease; opacity: .6;
+}
+.db-item[open] > .db-summary::before { transform: rotate(90deg); }
+.db-summary:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.08)); }
+.db-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.db-summary-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* Combined running-status + power control */
+.db-power {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 4px 10px; border-radius: 12px;
+  border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.3));
+  background: transparent; color: var(--vscode-foreground, #ccc);
+}
+.db-power svg { width: 12px; height: 12px; opacity: .8; }
+.db-power.on { border-color: color-mix(in srgb, var(--gm-ok) 45%, transparent); }
+.db-power.on:hover { color: var(--vscode-errorForeground, #f14c4c); border-color: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 55%, transparent); background: rgba(241,76,76,.10); }
+.db-power.off:hover { color: var(--gm-ok); border-color: color-mix(in srgb, var(--gm-ok) 55%, transparent); background: color-mix(in srgb, var(--gm-ok) 12%, transparent); }
+
+.db-body { padding: 6px 14px 12px; border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.14)); }
+.db-sub { margin: 10px 0; }
+.db-sub-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--vscode-descriptionForeground, #9d9d9d); margin-bottom: 4px;
+}
+.db-sub-head > span:first-child { flex: 0 0 auto; }
+.db-sub-head .btn { margin-left: auto; }
+.db-line {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 5px 4px; border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.1));
+}
+.db-line:first-of-type { border-top: none; }
+.db-line-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.db-line-name svg { width: 14px; height: 14px; opacity: .75; flex: none; }
+.db-line-meta { font-size: 11px; color: var(--vscode-descriptionForeground, #9d9d9d); }
+.db-line-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.db-empty { font-size: 12px; color: var(--vscode-descriptionForeground, #9d9d9d); padding: 4px; }
+.db-footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.14)); }
 
 /* Empty / note states */
 .empty { text-align: center; color: var(--vscode-descriptionForeground, #9d9d9d); padding: 22px 12px; }

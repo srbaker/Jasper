@@ -8,6 +8,8 @@
 (function () {
   let vscode;
   let els;
+  // dirNames of databases the user has expanded — preserved across re-renders.
+  const expandedDbs = new Set();
 
   // Inline codicon-style SVGs (fill=currentColor keeps them theme-driven).
   const ICONS = {
@@ -67,10 +69,11 @@
     const a = attrs || {};
     const dataVersion = a.version ? ` data-version="${esc(a.version)}"` : '';
     const dataDir = a.dir ? ` data-dir="${esc(a.dir)}"` : '';
+    const dataFolder = a.folder ? ` data-folder="${esc(a.folder)}"` : '';
     const title = a.title ? ` title="${esc(a.title)}"` : '';
     const iconOnly = a.iconOnly ? '' : `<span>${esc(label)}</span>`;
     const ariaLabel = a.iconOnly ? ` aria-label="${esc(label)}"` : '';
-    return `<button class="btn ${cls || 'btn-secondary'} btn-sm" data-action="${action}"${dataVersion}${dataDir}${title}${ariaLabel}>${icon ? ICONS[icon] : ''}${iconOnly}</button>`;
+    return `<button class="btn ${cls || 'btn-secondary'} btn-sm" data-action="${action}"${dataVersion}${dataDir}${dataFolder}${title}${ariaLabel}>${icon ? ICONS[icon] : ''}${iconOnly}</button>`;
   }
 
   // ── OS section ──────────────────────────────────────────────────────────────
@@ -207,40 +210,100 @@
     return `<span class="svc"><span class="dot ${running ? 'ok' : 'off'}"></span><span class="svc-label">${esc(label)}</span><span class="svc-state ${running ? 'on' : 'offc'}">${running ? 'Running' : 'Stopped'}</span></span>`;
   }
 
-  function dbActions(db) {
-    const d = db.dirName;
-    const stoneBtn = db.stoneRunning
-      ? btn('stopStone', 'Stop', 'stop', 'btn-ghost', { dir: d, title: 'Stop the Stone' })
-      : btn('startStone', 'Start', 'play', 'btn-primary', { dir: d, title: 'Start the Stone' });
-    const netldiBtn = db.netldiRunning
-      ? btn('stopNetldi', 'Stop NetLDI', 'stop', 'btn-ghost', { dir: d, iconOnly: true, title: 'Stop NetLDI' })
-      : btn('startNetldi', 'Start NetLDI', 'play', 'btn-ghost', { dir: d, iconOnly: true, title: 'Start NetLDI' });
-    return (
-      stoneBtn +
-      netldiBtn +
-      btn('createLoginFromDb', 'New Login', 'login', 'btn-ghost', { dir: d, iconOnly: true, title: 'Create a login for this database' }) +
-      btn('openDbTerminal', 'Terminal', 'terminal', 'btn-ghost', { dir: d, iconOnly: true, title: 'Open a terminal for this database' }) +
-      btn('openDbInFinder', 'Reveal', 'reveal', 'btn-ghost', { dir: d, iconOnly: true, title: 'Reveal database folder' }) +
-      btn('replaceExtent', 'Replace Extent', 'swap', 'btn-ghost', { dir: d, iconOnly: true, title: 'Replace the extent with a fresh base extent' }) +
-      btn('deleteDatabase', 'Delete', 'trash', 'btn-danger', { dir: d, iconOnly: true, title: 'Delete this database' })
-    );
+  // The combined running-status + whole-database power control. The status IS
+  // the button: click to bring the Stone + NetLDI up or down together.
+  function powerControl(db) {
+    return db.stoneRunning
+      ? `<button class="db-power on" data-action="stopDatabase" data-dir="${esc(db.dirName)}" title="Stop database (Stone + NetLDI)"><span class="dot ok"></span><span class="db-power-text">Running</span>${ICONS.stop}</button>`
+      : `<button class="db-power off" data-action="startDatabase" data-dir="${esc(db.dirName)}" title="Start database (Stone + NetLDI)"><span class="dot off"></span><span class="db-power-text">Stopped</span>${ICONS.play}</button>`;
+  }
+
+  function subHead(title, action) {
+    return `<div class="db-sub-head"><span>${esc(title)}</span>${action || ''}</div>`;
+  }
+
+  // Live processes for this database (empty when nothing is running).
+  function renderProcesses(db) {
+    if (!db.processes.length) {
+      return `<div class="db-sub">${subHead('Processes')}<div class="db-empty">Not running.</div></div>`;
+    }
+    const rows = db.processes
+      .map((p) => {
+        const stale = !p.responding;
+        const meta = [`pid ${p.pid}`];
+        if (p.port) meta.push(`port ${p.port}`);
+        meta.push(stale ? `stale · ${esc(p.status)}` : 'OK');
+        return `<div class="db-line${stale ? ' row-warn' : ''}">
+          <span class="db-line-name"><span class="dot ${stale ? 'warn' : 'ok'}"></span>${p.type === 'stone' ? 'Stone' : 'NetLDI'} <span class="mono dim">${esc(p.name)}</span></span>
+          <span class="db-line-meta mono">${meta.join(' · ')}</span>
+        </div>`;
+      })
+      .join('');
+    return `<div class="db-sub">${subHead('Processes')}${rows}</div>`;
+  }
+
+  // Logins that target this database, plus a New Login affordance.
+  function renderLogins(db) {
+    const rows = db.logins.length
+      ? db.logins
+          .map(
+            (l) =>
+              `<div class="db-line"><span class="db-line-name">${ICONS.login}<span>${esc(l.label)}</span></span></div>`,
+          )
+          .join('')
+      : `<div class="db-empty">No logins yet.</div>`;
+    const add = btn('createLoginFromDb', 'New Login', 'plus', 'btn-ghost', { dir: db.dirName });
+    return `<div class="db-sub">${subHead('Logins', add)}${rows}</div>`;
+  }
+
+  // The database's sections: Stone, NetLDI, and its Logs/Config folders.
+  function svcRow(label, running, startAction, stopAction, dir, extra) {
+    const chip = running
+      ? `<span class="svc"><span class="dot ok"></span><span class="svc-state on">Running</span></span>`
+      : `<span class="svc"><span class="dot off"></span><span class="svc-state offc">Stopped</span></span>`;
+    const toggle = running
+      ? btn(stopAction, 'Stop', 'stop', 'btn-ghost', { dir, iconOnly: true, title: `Stop ${label}` })
+      : btn(startAction, 'Start', 'play', 'btn-ghost', { dir, iconOnly: true, title: `Start ${label}` });
+    return `<div class="db-line">
+      <span class="db-line-name">${esc(label)}${extra ? ` <span class="mono dim">${extra}</span>` : ''}</span>
+      <span class="db-line-actions">${chip}${toggle}</span>
+    </div>`;
+  }
+
+  function renderSectionsGroup(db) {
+    const stone = svcRow('Stone', db.stoneRunning, 'startStone', 'stopStone', db.dirName, esc(db.stoneName));
+    const netldi = svcRow('NetLDI', db.netldiRunning, 'startNetldi', 'stopNetldi', db.dirName, esc(db.ldiName));
+    const logs = `<div class="db-line"><span class="db-line-name">Logs</span><span class="db-line-actions">${btn('openDbSubfolder', 'Open', 'folder', 'btn-ghost', { dir: db.dirName, folder: 'log' })}</span></div>`;
+    const conf = `<div class="db-line"><span class="db-line-name">Config</span><span class="db-line-actions">${btn('openDbSubfolder', 'Open', 'gear', 'btn-ghost', { dir: db.dirName, folder: 'conf' })}</span></div>`;
+    const extent = `<div class="db-line"><span class="db-line-name">Base extent</span><span class="db-line-meta mono">${esc(db.baseExtent)}</span></div>`;
+    return `<div class="db-sub">${subHead('Sections')}${stone}${netldi}${logs}${conf}${extent}</div>`;
+  }
+
+  function renderDbItem(db) {
+    return `<details class="db-item" data-db="${esc(db.dirName)}">
+      <summary class="db-summary">
+        <span class="db-title"><span class="row-name">${esc(db.stoneName)}</span><span class="mono dim">${esc(db.dirName)}</span></span>
+        <span class="pill pill-available mono">${esc(db.version)}</span>
+        <span class="db-summary-actions">${powerControl(db)}</span>
+      </summary>
+      <div class="db-body">
+        ${renderProcesses(db)}
+        ${renderLogins(db)}
+        ${renderSectionsGroup(db)}
+        <div class="db-footer">
+          ${btn('openDbTerminal', 'Terminal', 'terminal', 'btn-ghost', { dir: db.dirName })}
+          ${btn('openDbInFinder', 'Reveal', 'reveal', 'btn-ghost', { dir: db.dirName })}
+          ${btn('replaceExtent', 'Replace Extent', 'swap', 'btn-ghost', { dir: db.dirName })}
+          ${btn('deleteDatabase', 'Delete Database', 'trash', 'btn-danger', { dir: db.dirName })}
+        </div>
+      </div>
+    </details>`;
   }
 
   function renderDatabases(databases, open) {
-    const rows = databases.length
-      ? databases
-          .map((db) => {
-            const sub = [`GemStone ${esc(db.version)}`, `extent: ${esc(db.baseExtent)}`, `netldi: ${esc(db.ldiName)}`];
-            return `<div class="row">
-              <div class="row-main">
-                <div class="row-title"><span class="row-name">${esc(db.stoneName)}</span><span class="row-sub" style="margin:0"><span class="mono">${esc(db.dirName)}</span></span></div>
-                <div class="row-sub">${svc('Stone', db.stoneRunning)}${svc('NetLDI', db.netldiRunning)}<span>${sub.join(' · ')}</span></div>
-              </div>
-              <div class="row-actions">${dbActions(db)}</div>
-            </div>`;
-          })
-          .join('')
-      : `<div class="empty">No databases yet.${' '}<div>${btn('createDatabase', 'New Database…', 'plus', 'btn-primary')}</div></div>`;
+    const body = databases.length
+      ? databases.map(renderDbItem).join('')
+      : `<div class="empty">No databases yet.<div>${btn('createDatabase', 'New Database…', 'plus', 'btn-primary')}</div></div>`;
     return `<details class="section"${openAttr(open)}>
       <summary>
         <span class="section-icon">${ICONS.database}</span>
@@ -248,7 +311,7 @@
         <span class="count-badge">${databases.length}</span>
         <span class="section-head-actions">${btn('createDatabase', 'New Database…', 'plus', 'btn-primary')}</span>
       </summary>
-      <div class="section-body">${rows}</div>
+      <div class="section-body">${body}</div>
     </details>`;
   }
 
@@ -273,6 +336,15 @@
     els.root.innerHTML = orderedSections(state)
       .map((s) => s.html)
       .join('');
+    // Restore each database's expanded state across re-renders, and keep the
+    // set in sync as the user opens/closes them.
+    els.root.querySelectorAll('details[data-db]').forEach((d) => {
+      if (expandedDbs.has(d.dataset.db)) d.open = true;
+      d.addEventListener('toggle', () => {
+        if (d.open) expandedDbs.add(d.dataset.db);
+        else expandedDbs.delete(d.dataset.db);
+      });
+    });
   }
 
   function post(msg) {
@@ -282,7 +354,9 @@
   function onClick(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
-    post({ command: el.dataset.action, version: el.dataset.version, dirName: el.dataset.dir });
+    // Prevent an action button inside a <summary> from also toggling it.
+    e.preventDefault();
+    post({ command: el.dataset.action, version: el.dataset.version, dirName: el.dataset.dir, folder: el.dataset.folder });
   }
 
   function init(refs, api) {

@@ -2706,7 +2706,13 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('gemstone.openManager', () => {
-      GemstoneManagerPanel.show({ storage: sysadminStorage, versionManager, processManager });
+      GemstoneManagerPanel.show({
+        storage: sysadminStorage,
+        versionManager,
+        processManager,
+        databaseManager,
+        getLogins: () => storage.getLogins(),
+      });
     }),
 
     vscode.commands.registerCommand('gemstone.deleteDatabase', async (node: DatabaseNode) => {
