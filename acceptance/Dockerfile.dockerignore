@@ -1,0 +1,37 @@
+# Ignore-file for acceptance/Dockerfile. BuildKit resolves a
+# <dockerfile-path>.dockerignore and it takes precedence over any root
+# .dockerignore, so the acceptance Docker config stays self-contained here.
+#
+# NOTE: patterns are relative to the BUILD CONTEXT ROOT (the repo root, because
+# the Dockerfile COPYs client/, server/, package.json, …), NOT to acceptance/.
+#
+# The image runs `npm ci` itself, so never ship host artifacts — especially
+# native modules built for macOS.
+**/node_modules
+client/tmp
+**/.vscode-test
+**/out
+*.vsix
+.git
+.gemstone
+gemstone
+
+# Acceptance-test outputs + caches (regenerated / re-fetched inside the container)
+acceptance/.features-gen
+acceptance/cucumber-report
+acceptance/test-results
+acceptance/playwright-report
+acceptance/.download-cache
+acceptance/manual/dist
+acceptance/manual/.astro
+
+# Scratch handoff plan — never enters an image
+NEXT.md
+
+# Local test-stone connection details — a darwin path, useless in the container
+client/.env.test
+client/.env.test.local
+
+# Editor / OS cruft
+.DS_Store
+.idea
