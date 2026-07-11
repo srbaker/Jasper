@@ -42,6 +42,15 @@ RUN npm ci
 COPY acceptance/package.json acceptance/package-lock.json ./acceptance/
 RUN cd acceptance && npm ci
 
+# Install GemStone (arm64 Linux, ~450 MB) into the acceptance stone-cache at the
+# path provision-stone.sh expects, so the @stone chapters can provision a stone
+# without downloading at run time. Keyed on client/bin so source edits don't
+# bust this (slow) layer.
+COPY client/bin ./client/bin
+RUN mkdir -p /app/acceptance/.stone-cache \
+ && cd /app/acceptance/.stone-cache \
+ && bash /app/client/bin/gs-install.sh 3.7.5
+
 COPY . .
 
 # VS Code loads Jasper from source, so the extension must be built.

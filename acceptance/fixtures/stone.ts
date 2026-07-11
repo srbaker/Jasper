@@ -26,9 +26,15 @@ export interface TestStone {
 
 const scriptsDir = path.resolve(__dirname, '..', 'scripts');
 
+/** GemStone platform key, matching gs-config.sh (Darwin arm64, or Linux). */
+function platformKey(): string {
+  if (process.platform === 'darwin') return 'arm64.Darwin';
+  return `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}.Linux`;
+}
+
 function installDir(version: string): string {
   return path.resolve(
-    __dirname, '..', '.stone-cache', 'tmp', 'gemstone', `GemStone64Bit${version}-arm64.Darwin`,
+    __dirname, '..', '.stone-cache', 'tmp', 'gemstone', `GemStone64Bit${version}-${platformKey()}`,
   );
 }
 

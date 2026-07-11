@@ -22,6 +22,7 @@ acceptance/cucumber-report
 acceptance/test-results
 acceptance/playwright-report
 acceptance/.download-cache
+acceptance/.stone-cache
 acceptance/manual/dist
 acceptance/manual/.astro
 
