@@ -1,0 +1,10 @@
+# Tool runtime for the acceptance workspace — host-native, no Docker, no Java.
+#
+# The whole pipeline is TypeScript/node: playwright-bdd drives VS Code, our own
+# generator turns the Cucumber JSON into MDX, Astro Starlight builds the manual,
+# and Playwright prints it to PDF. So the only pinned tool is node, matched to the
+# repo's .nvmrc for a reproducible runtime.
+#
+# Activate with `mise install` in this directory (or `mise exec -- <cmd>`).
+[tools]
+node = "24.15.0"

@@ -1,0 +1,20 @@
+{
+  "name": "jasper-acceptance",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Gherkin-authored, UI-driven acceptance suite for the Jasper VS Code extension whose primary output is a screenshot-rich living-documentation user manual.",
+  "type": "commonjs",
+  "scripts": {
+    "bdd": "bddgen",
+    "test": "bddgen && playwright test",
+    "test:ci": "xvfb-run -a npm test",
+    "manual": "npm --prefix manual run manual",
+    "manual:build": "npm --prefix manual run build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@vscode/test-electron": "^2.5.2",
+    "playwright-bdd": "^9",
+    "typescript": "^5.6.0"
+  }
+}

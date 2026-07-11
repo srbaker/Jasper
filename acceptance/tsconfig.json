@@ -3,8 +3,17 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    "lib": ["ES2021", "DOM"],
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "fixtures/**/*.ts",
+    "steps/**/*.ts",
+    "support/**/*.ts",
+    "pageobjects/**/*.ts",
+    "playwright.config.ts",
+    ".features-gen/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
 }
