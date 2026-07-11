@@ -373,6 +373,47 @@ async function loadRowanFromDirectory(
   await refreshWorkingSession(session, sessionManager, `Rowan project "${result.detail}" loaded.`);
 }
 
+// Write a loaded Rowan project's image state back to its own on-disk Tonel
+// source, in place (the inverse of loadRowanFromDirectory). Overwrites the disk
+// source with the image's version, so confirm first; the changes then show up in
+// Source Control for the user to git-commit. Clearing the dirty flag mutates
+// Rowan's system registry, so it runs over a transient SystemUser session.
+async function commitRowanFromDirectory(
+  session: ActiveSession, dir: string, sessionManager: SessionManager,
+): Promise<void> {
+  const projectName = readRowanWorkspaceProject(dir)?.name ?? path.basename(dir);
+  const choice = await vscode.window.showWarningMessage(
+    `Write the image's "${projectName}" back to its Tonel source on disk?`,
+    {
+      modal: true,
+      detail: 'This overwrites the on-disk source with the image\'s version. Review and commit the changes in Source Control afterward.',
+    },
+    'Commit to Disk',
+  );
+  if (choice !== 'Commit to Disk') return;
+
+  const sys = await obtainSystemUserSession(session, `commit Rowan project "${projectName}" to disk`);
+  if (!sys) return;
+  let result;
+  try {
+    result = queries.commitRowanProject(sys, projectName);
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(`Commit of "${projectName}" to disk failed: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  } finally {
+    try { session.gci.GciTsLogout(sys.handle); } catch { /* transient session */ }
+  }
+
+  if (!result.success) {
+    vscode.window.showErrorMessage(`Commit of "${projectName}" to disk failed: ${result.detail}`);
+    return;
+  }
+  await refreshWorkingSession(
+    session, sessionManager,
+    `"${projectName}" written to disk — review and commit the changes in Source Control.`,
+  );
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // Create every output channel up front — not lazily on first use — so the
   // full set is discoverable in the Output view's channel dropdown from
@@ -2262,6 +2303,10 @@ export function activate(context: vscode.ExtensionContext) {
         loadProject: async (root: string) => {
           const session = await sessionManager.resolveSession();
           if (session) await loadRowanFromDirectory(session, root, sessionManager);
+        },
+        commitProject: async (root: string) => {
+          const session = await sessionManager.resolveSession();
+          if (session) await commitRowanFromDirectory(session, root, sessionManager);
         },
       }),
       { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false },

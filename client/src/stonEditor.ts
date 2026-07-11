@@ -29,6 +29,7 @@ export interface StonEditorDeps {
   onDidChangeSession: vscode.Event<unknown>;
   getLogins(): GemStoneLogin[];
   loadProject(root: string): Promise<void>;
+  commitProject(root: string): Promise<void>;
 }
 
 interface Section {
@@ -168,6 +169,14 @@ export class StonEditorProvider implements vscode.CustomTextEditorProvider {
           await render();
         } catch (e: unknown) {
           vscode.window.showErrorMessage(`Load failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (msg?.type === 'commitToDisk') {
+        const root = path.dirname(path.dirname(document.uri.fsPath));
+        try {
+          await this.deps.commitProject(root);
+          await render();
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Commit to disk failed: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else if (msg?.type === 'viewDrift') {
         const session = this.deps.getSession();
@@ -406,7 +415,9 @@ if (vs) vs.addEventListener('click', () => vscode.postMessage({ type: 'viewSourc
         if (!proj) {
           status = `<span class="ston-conn-status">Not loaded in this stone</span><button class="ston-conn-btn" data-conn="load">Load…</button>`;
         } else if (proj.isDirty) {
-          status = `<span class="ston-conn-status drift">Loaded · image differs from disk</span><button class="ston-conn-btn" data-conn="viewDrift">View Drift</button>`;
+          status = `<span class="ston-conn-status drift">Loaded · image differs from disk</span>` +
+            `<button class="ston-conn-btn" data-conn="commitToDisk">Commit to Disk</button>` +
+            `<button class="ston-conn-btn ghost" data-conn="viewDrift">View Drift</button>`;
         } else {
           status = `<span class="ston-conn-status insync">Loaded · in sync with disk ✓</span>`;
         }

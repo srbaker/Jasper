@@ -34,6 +34,7 @@ import { getStepPointSelectorRanges as sharedGetStepPointSelectorRanges } from '
 import { listRowanProjects as sharedListRowanProjects } from './queries/rowan/listRowanProjects';
 import { getGemCacheKB as sharedGetGemCacheKB } from './queries/rowan/getGemCacheKB';
 import { exportRowanProject as sharedExportRowanProject } from './queries/rowan/exportRowanProject';
+import { commitRowanProject as sharedCommitRowanProject } from './queries/rowan/commitRowanProject';
 import { findRowanClassOwners as sharedFindRowanClassOwners } from './queries/rowan/findRowanClassOwners';
 import { listAllRowanClasses as sharedListAllRowanClasses } from './queries/rowan/listAllRowanClasses';
 import {
@@ -85,6 +86,7 @@ export type { MethodSearchResult } from './queries/methodSearch';
 export type { ClassInfo } from './queries/loadClassInfo';
 export type { RowanProject, RowanProjectList } from './queries/rowan/listRowanProjects';
 export type { RowanExportResult } from './queries/rowan/exportRowanProject';
+export type { RowanCommitResult } from './queries/rowan/commitRowanProject';
 export type { RowanClassOwner, RowanClassOwners } from './queries/rowan/findRowanClassOwners';
 export type { RowanClassLocation } from './queries/rowan/listAllRowanClasses';
 export type { RowanLoadResult } from './queries/rowan/loadRowanProject';
@@ -327,6 +329,10 @@ export function exportRowanProject(
   session: ActiveSession, projectName: string, targetDir: string,
 ) {
   return sharedExportRowanProject(bind(session), projectName, targetDir);
+}
+
+export function commitRowanProject(session: ActiveSession, projectName: string) {
+  return sharedCommitRowanProject(bind(session), projectName);
 }
 
 export function findRowanClassOwners(session: ActiveSession, className: string) {

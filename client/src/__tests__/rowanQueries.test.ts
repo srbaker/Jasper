@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { listRowanProjects } from '../queries/rowan/listRowanProjects';
 import { getGemCacheKB } from '../queries/rowan/getGemCacheKB';
 import { exportRowanProject } from '../queries/rowan/exportRowanProject';
+import { commitRowanProject } from '../queries/rowan/commitRowanProject';
 import { findRowanClassOwners } from '../queries/rowan/findRowanClassOwners';
 import { listAllRowanClasses } from '../queries/rowan/listAllRowanClasses';
 import { loadRowanProject } from '../queries/rowan/loadRowanProject';
@@ -199,6 +200,40 @@ describe('exportRowanProject', () => {
     expect(code).toContain('writeResolvedProject:');
     expect(code).toContain('exportLoadSpecification');
     expect(code).toContain("diskRepositoryRoot: '/out/Cypress'");
+  });
+});
+
+describe('commitRowanProject', () => {
+  it('reports success and the project name on OK', () => {
+    const result = commitRowanProject(executor('OK\tCypress'), 'Cypress');
+
+    expect(result).toEqual({ success: true, detail: 'Cypress' });
+  });
+
+  it('reports failure with the error message on ERR', () => {
+    const result = commitRowanProject(executor('ERR\tProject Cypress is not loaded'), 'Cypress');
+
+    expect(result).toEqual({ success: false, detail: 'Project Cypress is not loaded' });
+  });
+
+  it('writes in place with the dirty-flag-clearing variant, committing the transaction', () => {
+    const execute = executor('OK\tCypress');
+
+    commitRowanProject(execute, 'Cypress');
+
+    const code = execute.mock.calls[0][1];
+    expect(code).toContain('writeProjectNamed:');
+    expect(code).toContain('System commitTransaction');
+    expect(code).toContain('System abortTransaction');
+    expect(code).not.toContain('diskRepositoryRoot:');
+  });
+
+  it('escapes a single quote in the project name', () => {
+    const execute = executor("OK\tO'Hara");
+
+    commitRowanProject(execute, "O'Hara");
+
+    expect(execute.mock.calls[0][1]).toContain("loadedProjectNamed: 'O''Hara'");
   });
 });
 
