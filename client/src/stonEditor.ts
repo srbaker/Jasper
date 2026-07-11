@@ -178,6 +178,27 @@ export class StonEditorProvider implements vscode.CustomTextEditorProvider {
         } catch (e: unknown) {
           vscode.window.showErrorMessage(`Commit to disk failed: ${e instanceof Error ? e.message : String(e)}`);
         }
+      } else if (msg?.type === 'reloadFromDisk') {
+        // The inverse of Commit to Disk: reloading re-resolves the project from
+        // its on-disk source, overwriting the image — so discard the image's
+        // changes only on explicit confirmation.
+        const root = path.dirname(path.dirname(document.uri.fsPath));
+        const projectName = readRowanWorkspaceProject(root)?.name ?? path.basename(root);
+        const choice = await vscode.window.showWarningMessage(
+          `Reload "${projectName}" from disk?`,
+          {
+            modal: true,
+            detail: 'This discards any changes in the image and reloads the project from its on-disk source.',
+          },
+          'Reload from Disk',
+        );
+        if (choice !== 'Reload from Disk') return;
+        try {
+          await this.deps.loadProject(root);
+          await render();
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Reload failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
       } else if (msg?.type === 'viewDrift') {
         const session = this.deps.getSession();
         if (!session) return;
@@ -417,6 +438,7 @@ if (vs) vs.addEventListener('click', () => vscode.postMessage({ type: 'viewSourc
         } else if (proj.isDirty) {
           status = `<span class="ston-conn-status drift">Loaded · image differs from disk</span>` +
             `<button class="ston-conn-btn" data-conn="commitToDisk">Commit to Disk</button>` +
+            `<button class="ston-conn-btn ghost" data-conn="reloadFromDisk">Reload from Disk</button>` +
             `<button class="ston-conn-btn ghost" data-conn="viewDrift">View Drift</button>`;
         } else {
           status = `<span class="ston-conn-status insync">Loaded · in sync with disk ✓</span>`;
