@@ -39,6 +39,17 @@ When('I choose Install', async ({ window }) => {
   await expect(install.installProgress).toBeHidden({ timeout: 180_000 });
 });
 
+When('I install the enhanced inspector from the Command Palette', async ({ window }) => {
+  const install = new EnhancedInspectorInstall(window);
+  // The command is only offered once a session is live and the stone supports it
+  // (when: gemstone.hasActiveSession && gemstone.enhancedInspectorSupported).
+  await runCommand(window, 'GemStone: Install Enhanced Inspector Support');
+  // Same install as the offer's "Install" — a progress notification that clears on
+  // success, re-probing the session so Inspect It then routes to the enhanced view.
+  await expect(install.installProgress).toBeVisible({ timeout: 30_000 });
+  await expect(install.installProgress).toBeHidden({ timeout: 180_000 });
+});
+
 When('I inspect the expression {string}', async ({ window }, code: string) => {
   await runCommand(window, 'GemStone: Open Workspace');
   await expect(editor(window)).toBeVisible({ timeout: 30_000 });

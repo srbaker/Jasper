@@ -31,3 +31,10 @@ Feature: Installing the enhanced inspector
   Scenario: With auto-install on, it installs without asking
     Given I am logged in to the test stone
     Then the enhanced inspector installs without prompting
+
+  @stone @stone:bare @systemuser
+  Scenario: Installing on demand from the Command Palette
+    Given I am logged in to the test stone
+    When I install the enhanced inspector from the Command Palette
+    And I inspect the expression "3 + 4"
+    Then the enhanced inspector opens

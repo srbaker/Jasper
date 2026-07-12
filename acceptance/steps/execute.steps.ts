@@ -25,8 +25,13 @@ When('I open a workspace', async ({ window }) => {
 
 When('I enter the expression {string}', async ({ window }, code: string) => {
   await editor(window).click();
-  await window.keyboard.type(code);
-  await window.keyboard.press('ControlOrMeta+a'); // select it (Ctrl on Linux, Cmd on macOS)
+  // The workspace opens with a scratch-pad template. Put the expression on a fresh
+  // line at the end and select ONLY it (not Ctrl+A over the whole buffer, which
+  // would compile the template prose and fail to evaluate) so Display It evaluates
+  // just this expression.
+  await window.keyboard.press('ControlOrMeta+End');
+  await window.keyboard.type(`\n${code}`);
+  await window.keyboard.press('Shift+Home');
   await expect(editor(window)).toContainText(code);
 });
 
@@ -35,7 +40,12 @@ When('I Display It', async ({ window }) => {
 });
 
 Then('the result {string} is shown', async ({ window }, value: string) => {
-  // Insert mode writes the result into the document once the on-stone evaluation
-  // returns; poll the editor text until it lands.
-  await expect(editor(window)).toContainText(value, { timeout: 30_000 });
+  // Insert mode inserts the result into the document AND decorates it. Assert the
+  // DECORATED span specifically — VS Code marks a text-editor decoration with a
+  // `ced-…TextEditorDecorationType…` class — so this catches the ACTUAL Display-It
+  // result, not a coincidental occurrence of the value elsewhere in the workspace.
+  const annotatedResult = editor(window)
+    .locator('.view-line span[class*="TextEditorDecorationType"]')
+    .filter({ hasText: value });
+  await expect(annotatedResult).toBeVisible({ timeout: 30_000 });
 });
