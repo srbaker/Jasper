@@ -11,16 +11,16 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
 import { Workbench } from '../pageobjects/workbench';
-import { LoginsView } from '../pageobjects/logins';
+import { LoginLauncher } from '../pageobjects/loginLauncher';
 import { runCommand } from '../pageobjects/palette';
 
 const { Given, When, Then } = createBdd(test);
 
 Given('I am logged in to the test stone', async ({ window, screen }) => {
   await new Workbench(window).openGemStoneSidebar();
-  const logins = new LoginsView(window);
-  await logins.connect(/DataCurator on/);
-  await expect(logins.session).toBeVisible({ timeout: 60_000 });
+  const launcher = new LoginLauncher(window);
+  await launcher.connect();
+  await expect(launcher.status).toContainText(/Connected/i, { timeout: 60_000 });
   await screen('A live session');
 });
 
