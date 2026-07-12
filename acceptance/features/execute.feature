@@ -7,5 +7,7 @@ Feature: Executing Smalltalk
   @stone
   Scenario: Display It shows an expression's value
     Given I am logged in to the test stone
-    When I Display It on "3 + 4" in a workspace
-    Then the value "7" is shown
+    When I open a workspace
+    And I enter the expression "3 + 4"
+    And I Display It
+    Then the result "7" is shown

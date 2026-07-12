@@ -34,24 +34,6 @@ const ROWAN_PROJECT_FIXTURE = path.resolve(__dirname, '..', 'fixtures', 'rowan-p
 /** The GemStone version the stone-backed chapters provision. */
 const STONE_VERSION = '3.7.5';
 
-/**
- * A configured login for the "open a folder first" chapter, applied at user
- * scope (that scenario opens no folder). No stone runs — the login's action
- * trips the "please open a folder" guard before it ever tries to connect.
- */
-const NO_WORKSPACE_LOGIN = {
-  'gemstone.logins': [
-    {
-      version: STONE_VERSION,
-      gem_host: 'localhost',
-      stone: 'gs64stone',
-      gs_user: 'DataCurator',
-      gs_password: 'swordfish',
-      netldi: '52020',
-    },
-  ],
-};
-
 export type AcceptanceTestFixtures = {
   /**
    * A provisioned acceptance stone for `@stone` scenarios (null otherwise).
@@ -98,22 +80,20 @@ export const test = base.extend<AcceptanceTestFixtures>({
 
   window: async ({ $tags, stone }, use) => {
     const bare = $tags.includes('@install') || $tags.includes('@bare');
-    const noWorkspace = $tags.includes('@no-workspace');
     const vscode = await launchVSCode({
       development: !bare,
       workspaceTrust: $tags.includes('@trust'),
       gemstoneRootPath: $tags.includes('@download') ? DOWNLOAD_CACHE : undefined,
-      noWorkspace,
+      noWorkspace: $tags.includes('@no-workspace'),
       // @rowan-project opens a real Rowan project (the HelloRowan fixture) so the
       // disk-first project view lights up.
       workspaceSeed: $tags.includes('@rowan-project') ? ROWAN_PROJECT_FIXTURE : undefined,
-      workspaceSettings: noWorkspace
-        ? NO_WORKSPACE_LOGIN
-        : stone
-          // Display It in insert mode so its result is real, readable document
-          // text (the default overlay is an unreadable CSS pseudo-element).
-          ? { ...loginSettings(stone), 'gemstone.displayItMode': 'insert' }
-          : undefined,
+      // Only a real @stone seeds a login (its running stone). Display It runs in
+      // insert mode so its result is readable document text, not an unreadable
+      // overlay pseudo-element.
+      workspaceSettings: stone
+        ? { ...loginSettings(stone), 'gemstone.displayItMode': 'insert' }
+        : undefined,
     });
     await use(vscode.window);
     await vscode.dispose();
