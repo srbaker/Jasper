@@ -1521,11 +1521,6 @@
           "group": "1_open@2"
         },
         {
-          "command": "gemstone.rowanUpdateRepo",
-          "when": "view == gemstoneRowan && viewItem =~ /^rowanRepo.*Git$/",
-          "group": "inline@0"
-        },
-        {
           "command": "gemstone.rowanLoadRepo",
           "when": "view == gemstoneRowan && (viewItem == rowanRepo || viewItem == rowanRepoGit || viewItem == rowanRepoWorkspace)",
           "group": "inline@1"
