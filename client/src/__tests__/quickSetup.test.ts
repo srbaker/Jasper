@@ -7,7 +7,7 @@ vi.mock('child_process');
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { exec } from 'child_process';
-import { runQuickSetup, QuickSetupDeps } from '../quickSetup';
+import { runQuickSetup, magicStart, QuickSetupDeps } from '../quickSetup';
 import { GemStoneVersion } from '../sysadminTypes';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -382,6 +382,120 @@ describe('runQuickSetup', () => {
     expect(deps.loginStorage.setGciLibraryPath).toHaveBeenCalledWith(
       '3.7.4',
       expect.stringContaining('libgcits-3.7.4-64.dylib'),
+    );
+  });
+});
+
+// ── One-click Get Started ──────────────────────────────────
+
+describe('magicStart', () => {
+  let originalPlatform: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockSharedMemory(SHMMAX_1GB, SHMALL_1GB);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  });
+
+  it('provisions a database with no version prompt', async () => {
+    const deps = makeDeps({
+      versionManager: {
+        fetchAvailableVersions: vi.fn(async () => [makeVersion({ extracted: true })]),
+        download: vi.fn(async () => {}),
+        extract: vi.fn(async () => {}),
+        downloadAndExtractWindowsClient: vi.fn(async () => {}),
+      } as any,
+    });
+
+    await magicStart(deps);
+
+    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalled();
+    expect(deps.processManager.startStone).toHaveBeenCalled();
+    expect(deps.processManager.startNetldi).toHaveBeenCalled();
+    expect(deps.loginStorage.saveLogin).toHaveBeenCalled();
+  });
+
+  it('connects to the new database without requiring an open folder', async () => {
+    const deps = makeDeps({
+      versionManager: {
+        fetchAvailableVersions: vi.fn(async () => [makeVersion({ extracted: true })]),
+        download: vi.fn(async () => {}),
+        extract: vi.fn(async () => {}),
+        downloadAndExtractWindowsClient: vi.fn(async () => {}),
+      } as any,
+    });
+
+    await magicStart(deps);
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'gemstone.login',
+      expect.objectContaining({
+        login: expect.objectContaining({ gs_user: 'DataCurator', stone: 'gs64stone', netldi: 'gs64ldi' }),
+        skipFolderCheck: true,
+      }),
+    );
+  });
+
+  it('opens a workspace after connecting so there is somewhere to type', async () => {
+    const deps = makeDeps({
+      versionManager: {
+        fetchAvailableVersions: vi.fn(async () => [makeVersion({ extracted: true })]),
+        download: vi.fn(async () => {}),
+        extract: vi.fn(async () => {}),
+        downloadAndExtractWindowsClient: vi.fn(async () => {}),
+      } as any,
+    });
+
+    await magicStart(deps);
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('gemstone.openWorkspace');
+  });
+
+  it('downloads and extracts the latest when nothing is installed', async () => {
+    const download = vi.fn(async () => {});
+    const extract = vi.fn(async () => {});
+    const deps = makeDeps({
+      versionManager: {
+        fetchAvailableVersions: vi.fn(async () => [makeVersion({ downloaded: false, extracted: false })]),
+        download,
+        extract,
+        downloadAndExtractWindowsClient: vi.fn(async () => {}),
+      } as any,
+    });
+
+    await magicStart(deps);
+
+    expect(download).toHaveBeenCalled();
+    expect(extract).toHaveBeenCalled();
+    expect(deps.loginStorage.saveLogin).toHaveBeenCalled();
+  });
+
+  it('prefers an already-installed version over downloading', async () => {
+    const download = vi.fn(async () => {});
+    const deps = makeDeps({
+      versionManager: {
+        fetchAvailableVersions: vi.fn(async () => [
+          makeVersion({ version: '3.7.5', downloaded: false, extracted: false }),
+          makeVersion({ version: '3.7.4', extracted: true }),
+        ]),
+        download,
+        extract: vi.fn(async () => {}),
+        downloadAndExtractWindowsClient: vi.fn(async () => {}),
+      } as any,
+    });
+
+    await magicStart(deps);
+
+    expect(download).not.toHaveBeenCalled();
+    expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalledWith(
+      '3.7.4', 'extent0', 'gs64stone', 'gs64ldi', expect.anything(),
     );
   });
 });
