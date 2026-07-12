@@ -14,6 +14,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { generateManual } from './generate.js';
+import { OUTLINE } from '../outline.js';
 
 const packageRoot = path.resolve(import.meta.dirname, '..', '..');
 
@@ -44,6 +45,8 @@ const manual = generateManual({
   dataDir,
   screensDir,
   screensUrlBase: '/screens',
+  outline: OUTLINE,
+  sidebarPath: path.join(packageRoot, 'src', 'generated', 'sidebar.json'),
 });
 
 // Stamp the clock here (the engine is deterministic/clock-free) and write the

@@ -194,6 +194,10 @@ export interface GenerateManualOptions {
   featureComponentImport?: string;
   /** Import specifier base for per-feature data JSON in generated MDX. */
   dataImportBase?: string;
+  /** The manual's table of contents. Chapters render grouped + ordered per this. */
+  outline?: ManualSection[];
+  /** File to write the generated Starlight sidebar JSON to (needs `outline`). */
+  sidebarPath?: string;
 }
 
 function readReport(reportPath: string): CucumberReport {
@@ -214,6 +218,50 @@ function readReport(reportPath: string): CucumberReport {
 function emptyDir(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
+}
+
+/** A named group of chapters (by Feature name) for the manual's sidebar. */
+export interface ManualSection {
+  title: string;
+  chapters: string[];
+}
+
+/** A Starlight sidebar entry: a link, or a labelled group of links. */
+type SidebarLink = { label: string; link: string };
+type SidebarGroup = { label: string; items: SidebarLink[] };
+type SidebarEntry = SidebarLink | SidebarGroup;
+
+/**
+ * Build the Starlight sidebar from the outline and the features that actually
+ * generated. Chapters render in outline order under their section; a listed
+ * chapter with no generated page is skipped; a generated chapter absent from the
+ * outline lands under a trailing "More" group so nothing is lost.
+ */
+function buildSidebar(features: ManualFeature[], outline: ManualSection[]): SidebarEntry[] {
+  const bySlugForName = new Map(features.map((f) => [f.name, f.slug]));
+  const placed = new Set<string>();
+
+  const sections: SidebarGroup[] = [];
+  for (const section of outline) {
+    const items: SidebarLink[] = [];
+    for (const name of section.chapters) {
+      const slug = bySlugForName.get(name);
+      if (!slug || placed.has(slug)) continue;
+      placed.add(slug);
+      items.push({ label: name, link: `/features/${slug}/` });
+    }
+    if (items.length) sections.push({ label: section.title, items });
+  }
+
+  const leftover = features.filter((f) => !placed.has(f.slug));
+  if (leftover.length) {
+    sections.push({
+      label: 'More',
+      items: leftover.map((f) => ({ label: f.name, link: `/features/${f.slug}/` })),
+    });
+  }
+
+  return [{ label: 'Introduction', link: '/' }, ...sections];
 }
 
 function mdxPage(
@@ -263,6 +311,14 @@ export function generateManual(options: GenerateManualOptions): Manual {
     fs.writeFileSync(
       path.join(options.contentDir, `${feature.slug}.mdx`),
       mdxPage(feature, componentImport, `${dataImportBase}/${feature.slug}.json`),
+    );
+  }
+
+  if (options.outline && options.sidebarPath) {
+    fs.mkdirSync(path.dirname(options.sidebarPath), { recursive: true });
+    fs.writeFileSync(
+      options.sidebarPath,
+      JSON.stringify(buildSidebar(manual.features, options.outline), null, 2),
     );
   }
 
