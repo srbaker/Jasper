@@ -34,6 +34,18 @@ const ROWAN_PROJECT_FIXTURE = path.resolve(__dirname, '..', 'fixtures', 'rowan-p
 /** The GemStone version the stone-backed chapters provision. */
 const STONE_VERSION = '3.7.5';
 
+/**
+ * The `gemstone.enhancedInspector.autoInstall` mode a scenario opts into, or
+ * undefined to keep the fixture default (`never`). Only the enhanced-inspector
+ * chapter uses these: `@enhanced-ask` surfaces the modal offer on connect,
+ * `@enhanced-always` auto-installs on connect.
+ */
+function enhancedInspectorAutoInstall(tags: string[]): 'ask' | 'always' | undefined {
+  if (tags.includes('@enhanced-always')) return 'always';
+  if (tags.includes('@enhanced-ask')) return 'ask';
+  return undefined;
+}
+
 export type AcceptanceTestFixtures = {
   /**
    * A provisioned acceptance stone for `@stone` scenarios (null otherwise).
@@ -84,9 +96,17 @@ export const test = base.extend<AcceptanceTestFixtures>({
       workspaceSeed: $tags.includes('@rowan-project') ? ROWAN_PROJECT_FIXTURE : undefined,
       // Only a real @stone seeds a login (its running stone). Display It runs in
       // insert mode so its result is readable document text, not an unreadable
-      // overlay pseudo-element.
+      // overlay pseudo-element. The enhanced-inspector chapter opts into the
+      // install offer: @enhanced-ask surfaces the modal on connect; @enhanced-always
+      // auto-installs. Everything else keeps the quiet `never` from loginSettings.
       workspaceSettings: stone
-        ? { ...loginSettings(stone), 'gemstone.displayItMode': 'insert' }
+        ? {
+            ...loginSettings(stone),
+            'gemstone.displayItMode': 'insert',
+            ...(enhancedInspectorAutoInstall($tags)
+              ? { 'gemstone.enhancedInspector.autoInstall': enhancedInspectorAutoInstall($tags) }
+              : {}),
+          }
         : undefined,
     });
     await use(vscode.window);

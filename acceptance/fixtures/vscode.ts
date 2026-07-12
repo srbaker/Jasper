@@ -178,6 +178,13 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
     // points.
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
     'chat.commandCenter.enabled': false,
+    // Render modal message boxes (window.showInformationMessage({modal:true}), e.g.
+    // the enhanced-inspector install offer) as CUSTOM DOM dialogs (.monaco-dialog-box)
+    // instead of native OS dialogs. Native message boxes don't appear in the DOM —
+    // and under headless Xvfb aren't interactable at all — so Playwright could
+    // neither see nor answer them. (The Workspace Trust dialog is always custom,
+    // which is why it worked without this.)
+    'window.dialogStyle': 'custom',
     ...(noWorkspace ? settings : {}),
   };
   if (options.workspaceTrust) {

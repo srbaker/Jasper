@@ -84,5 +84,11 @@ export function loginSettings(stone: TestStone): Record<string, unknown> {
         sync_classes: false,
       },
     ],
+    // Our stone is a fresh 3.7.5 extent without the enhanced inspector support, so
+    // the default `ask` mode would pop a modal install offer on EVERY connect —
+    // interfering with chapters that aren't about it. Default to `never` (quiet);
+    // the "Installing the enhanced inspector" chapter opts back into `ask`/`always`
+    // via its tags (see fixtures/test.ts).
+    'gemstone.enhancedInspector.autoInstall': 'never',
   };
 }
