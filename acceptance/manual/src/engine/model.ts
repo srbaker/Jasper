@@ -48,6 +48,8 @@ export interface ManualScenario {
   name: string;
   description?: string;
   tags: string[];
+  /** Human-readable "runs against" notes derived from tags (extent, user, …). */
+  annotations?: string[];
   status: ScenarioStatus;
   steps: ManualStep[];
 }
@@ -61,6 +63,8 @@ export interface ManualFeature {
   /** Source feature-file path, for provenance. */
   uri: string;
   tags: string[];
+  /** Human-readable "runs against" notes derived from tags (extent, user, …). */
+  annotations?: string[];
   status: ScenarioStatus;
   scenarios: ManualScenario[];
 }

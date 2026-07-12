@@ -200,6 +200,8 @@ export interface GenerateManualOptions {
   sidebarPath?: string;
   /** Chapter name → authored page link, so the outline can place hand-written pages. */
   authoredPages?: Record<string, string>;
+  /** Derive per-scenario/feature "runs against" notes from tags (product-specific). */
+  annotate?: (tags: string[]) => string[];
 }
 
 function readReport(reportPath: string): CucumberReport {
@@ -326,6 +328,13 @@ export function generateManual(options: GenerateManualOptions): Manual {
 
   const report = readReport(options.reportPath);
   const { manual, assets } = buildManual(report, { screensUrlBase: options.screensUrlBase });
+
+  if (options.annotate) {
+    for (const feature of manual.features) {
+      feature.annotations = options.annotate(feature.tags);
+      for (const scenario of feature.scenarios) scenario.annotations = options.annotate(scenario.tags);
+    }
+  }
 
   emptyDir(options.contentDir);
   emptyDir(options.dataDir);

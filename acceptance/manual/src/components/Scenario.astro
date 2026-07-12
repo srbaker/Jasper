@@ -20,9 +20,10 @@ const Heading = `h${headingLevel}` as const;
     <StatusBadge status={scenario.status} />
   </Heading>
 
-  {scenario.tags.length > 0 && (
-    <p class="scenario-tags">
-      {scenario.tags.map((tag) => <span class="tag">{tag}</span>)}
+  {scenario.annotations && scenario.annotations.length > 0 && (
+    <p class="scenario-annotations">
+      <span class="anno-label">Runs against</span>
+      {scenario.annotations.map((note) => <span class="anno">{note}</span>)}
     </p>
   )}
 

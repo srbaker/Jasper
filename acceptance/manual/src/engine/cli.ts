@@ -14,6 +14,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { generateManual, parseOutlineMarkdown } from './generate.js';
+import { annotate } from '../annotations.js';
 
 const packageRoot = path.resolve(import.meta.dirname, '..', '..');
 
@@ -53,6 +54,7 @@ const manual = generateManual({
   sidebarPath: path.join(packageRoot, 'src', 'generated', 'sidebar.json'),
   // Hand-written pages the outline can place (Feature name → page link).
   authoredPages: { Glossary: '/glossary/' },
+  annotate,
 });
 
 // Stamp the clock here (the engine is deterministic/clock-free) and write the

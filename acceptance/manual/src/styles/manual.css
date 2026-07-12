@@ -33,6 +33,31 @@
   color: var(--sl-color-gray-2, #333);
 }
 
+/* "Runs against" notes — what a chapter needs (extent, user), from its tags. */
+.scenario-annotations {
+  margin-block: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.anno-label {
+  font: 600 0.7rem/1.4 var(--sl-font-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sl-color-gray-3, #888);
+}
+
+.anno {
+  font: 500 0.78rem/1.4 var(--sl-font-sans, sans-serif);
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--sl-color-gray-5, #ddd);
+  background: var(--sl-color-gray-7, #f6f6f6);
+  color: var(--sl-color-gray-1, #222);
+}
+
 .scenario-description {
   color: var(--sl-color-gray-2, #444);
 }
