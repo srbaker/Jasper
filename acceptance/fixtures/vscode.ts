@@ -94,6 +94,14 @@ export interface LaunchOptions {
    * folder guard.
    */
   noWorkspace?: boolean;
+  /**
+   * Absolute path to a fixture directory whose contents are copied into the
+   * throwaway workspace folder before launch — so the opened folder is a real
+   * project (e.g. a Rowan project) instead of an empty dir. The copy keeps the
+   * committed fixture pristine even when a chapter mutates the workspace
+   * (create/commit/edit). Default: an empty workspace.
+   */
+  workspaceSeed?: string;
 }
 
 /**
@@ -135,6 +143,12 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   const vscodeCliPath = await downloadAndUnzipVSCode(VSCODE_VERSION);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jasper-acceptance-'));
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'jasper-workspace-'));
+
+  // Seed the workspace from a fixture project (copied, so the fixture stays
+  // pristine even if the chapter writes to the folder).
+  if (options.workspaceSeed) {
+    fs.cpSync(options.workspaceSeed, workspace, { recursive: true });
+  }
 
   const gemstoneRoot = options.gemstoneRootPath ?? path.join(profile, 'gemstone-root');
   fs.mkdirSync(gemstoneRoot, { recursive: true });

@@ -28,6 +28,9 @@ import {
 /** Persistent, git-ignored cache for the "Download GemStone" chapter. */
 const DOWNLOAD_CACHE = path.resolve(__dirname, '..', '.download-cache', 'gemstone-root');
 
+/** A real Rowan project (HelloRowan) the disk-first Rowan chapters open. */
+const ROWAN_PROJECT_FIXTURE = path.resolve(__dirname, '..', 'fixtures', 'rowan-project');
+
 /** The GemStone version the stone-backed chapters provision. */
 const STONE_VERSION = '3.7.5';
 
@@ -94,6 +97,9 @@ export const test = base.extend<AcceptanceTestFixtures>({
       workspaceTrust: $tags.includes('@trust'),
       gemstoneRootPath: $tags.includes('@download') ? DOWNLOAD_CACHE : undefined,
       noWorkspace,
+      // @rowan-project opens a real Rowan project (the HelloRowan fixture) so the
+      // disk-first project view lights up.
+      workspaceSeed: $tags.includes('@rowan-project') ? ROWAN_PROJECT_FIXTURE : undefined,
       workspaceSettings: noWorkspace
         ? NO_WORKSPACE_LOGIN
         : stone

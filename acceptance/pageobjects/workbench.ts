@@ -31,4 +31,16 @@ export class Workbench {
     await this.gemstoneActivityItem.click();
     await expect(this.sidebar).toBeVisible();
   }
+
+  /**
+   * Ensure the Explorer sidebar is open. Clicking an already-active activity-bar
+   * item toggles the sidebar *shut*, and the Explorer is open by default on a
+   * fresh folder — so only click when the sidebar is currently closed.
+   */
+  async openExplorer(): Promise<void> {
+    if (!(await this.sidebar.isVisible())) {
+      await this.page.locator('.activitybar [aria-label^="Explorer"]').first().click();
+    }
+    await expect(this.sidebar).toBeVisible();
+  }
 }
