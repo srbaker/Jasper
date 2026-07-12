@@ -2,8 +2,8 @@
 #
 # Build the living-documentation manual with the GUI chapters run HEADLESS in a
 # Linux container (VS Code renders to a virtual display — nothing opens on your
-# macOS desktop, and no window steals focus), then generate the Astro site + PDF
-# on the host. This is the headless counterpart of build-manual.sh.
+# macOS desktop, and no window steals focus), then generate the single-file HTML
+# manual on the host. This is the headless counterpart of build-manual.sh.
 #
 #   npm run manual:docker                 # always-on chapters (core + @stone)
 #   npm run manual:docker -- download     # + the download chapter

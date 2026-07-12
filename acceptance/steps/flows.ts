@@ -14,6 +14,7 @@
 import { expect, type Page } from '@playwright/test';
 import { Workbench } from '../pageobjects/workbench';
 import { LoginLauncher } from '../pageobjects/loginLauncher';
+import { dismissWalkthrough } from '../pageobjects/walkthrough';
 
 /**
  * Logged in to the provisioned @stone via the Login Launcher — the live-session
@@ -29,4 +30,7 @@ export async function logIn(window: Page): Promise<void> {
   // connected. (Don't match the status text for /Connected/ — "Not connected"
   // contains "connected", so that would pass on the disconnected state.)
   await expect(launcher.disconnectButton).toBeVisible({ timeout: 60_000 });
+  // First connect opens the Getting Started walkthrough; close it so the
+  // situation this flow sets up is the clean connected state, not the onboarding.
+  await dismissWalkthrough(window);
 }

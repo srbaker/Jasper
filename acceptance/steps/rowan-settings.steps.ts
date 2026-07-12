@@ -7,6 +7,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
+import { jasperWebview } from '../pageobjects/webview';
 import { runCommand } from '../pageobjects/palette';
 
 // The Given "I have opened the HelloRowan project" is shared — defined in
@@ -27,6 +28,6 @@ When('I open the project manifest as settings', async ({ window }) => {
 Then('the STON settings editor shows the project', async ({ window }) => {
   // The settings editor is a webview: VS Code nests it in an outer .webview
   // iframe and an inner #active-frame.
-  const frame = window.frameLocator('iframe.webview').frameLocator('#active-frame');
+  const frame = jasperWebview(window);
   await expect(frame.getByText(/HelloRowan/).first()).toBeVisible({ timeout: 30_000 });
 });

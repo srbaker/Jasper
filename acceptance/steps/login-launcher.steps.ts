@@ -8,11 +8,12 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
+import { jasperWebview } from '../pageobjects/webview';
 
 const { Then } = createBdd(test);
 
 Then('the launcher shows {string} with a way to add one', async ({ window }, text: string) => {
-  const frame = window.frameLocator('iframe.webview').frameLocator('#active-frame');
+  const frame = jasperWebview(window);
   await expect(frame.getByText(text)).toBeVisible({ timeout: 30_000 });
   await expect(frame.getByText('Add a login')).toBeVisible();
 });

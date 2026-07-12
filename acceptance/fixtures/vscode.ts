@@ -172,6 +172,12 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
   // settings (the configured login, gemstone.rootPath) are applied here instead.
   const userSettings: Record<string, unknown> = {
     'extensions.verifySignature': false,
+    // Keep VS Code's Copilot "Chat" out of the suite — it opens in the auxiliary
+    // bar by default, distracts every screenshot, and adds a second webview that
+    // makes iframe.webview ambiguous. Hide the secondary side bar and its entry
+    // points.
+    'workbench.secondarySideBar.defaultVisibility': 'hidden',
+    'chat.commandCenter.enabled': false,
     ...(noWorkspace ? settings : {}),
   };
   if (options.workspaceTrust) {
@@ -197,6 +203,12 @@ export async function launchVSCode(options: LaunchOptions = {}): Promise<Launche
       // Every scenario disables Workspace Trust so the dialog never interrupts —
       // except the "Trust your workspace" chapter, which wants to capture it.
       ...(options.workspaceTrust ? [] : ['--disable-workspace-trust']),
+      // VS Code now bundles GitHub Copilot Chat as a built-in extension; its "Chat
+      // / Build with Agent" view auto-opens in the secondary side bar on a fresh
+      // profile (no setting suppresses it) — a distraction in every screenshot and
+      // a second webview that made `iframe.webview` ambiguous. Disable the built-in
+      // outright so it never loads. (Jasper still loads via --extensionDevelopmentPath.)
+      '--disable-extension', 'GitHub.copilot-chat',
       '--skip-welcome',
       '--skip-release-notes',
       '--disable-updates',

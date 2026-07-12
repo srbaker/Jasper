@@ -53,8 +53,13 @@ RUN mkdir -p /app/acceptance/.stone-cache \
 
 COPY . .
 
-# VS Code loads Jasper from source, so the extension must be built.
-RUN npm run compile:client
+# VS Code loads Jasper from source, so the extension must be built — both the
+# client (the extension) AND the server (the LSP the extension forks). Building
+# only the client left server/out/server.js absent, so the language server
+# crash-looped ("crashed 5 times… will not be restarted") on every launch. Build
+# from source here rather than relying on a copied host build (server/out is
+# gitignored and platform-specific).
+RUN npm run compile:client && npm run compile:server
 
 # Pre-create the mount points so their bind mounts inherit pwuser ownership, then
 # run as the non-root pwuser the base image provides.

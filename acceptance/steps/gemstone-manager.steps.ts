@@ -7,6 +7,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
+import { jasperWebview } from '../pageobjects/webview';
 import { runCommand } from '../pageobjects/palette';
 
 const { When, Then } = createBdd(test);
@@ -16,7 +17,7 @@ When('I open the GemStone Manager', async ({ window }) => {
 });
 
 Then('it shows the Operating System, Versions, and Databases sections', async ({ window }) => {
-  const frame = window.frameLocator('iframe.webview').frameLocator('#active-frame');
+  const frame = jasperWebview(window);
   await expect(frame.getByText('Operating System')).toBeVisible({ timeout: 30_000 });
   await expect(frame.getByText('Versions', { exact: true })).toBeVisible();
   await expect(frame.getByText('Databases', { exact: true })).toBeVisible();

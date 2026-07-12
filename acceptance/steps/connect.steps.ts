@@ -10,6 +10,7 @@ import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
 import { Workbench } from '../pageobjects/workbench';
 import { LoginLauncher } from '../pageobjects/loginLauncher';
+import { dismissWalkthrough } from '../pageobjects/walkthrough';
 
 const { Given, When, Then } = createBdd(test);
 
@@ -26,4 +27,7 @@ Then('a live session appears under the login', async ({ window }) => {
   // Connected for real: the disconnect (⏹) button appears only when a session is
   // live. NOT a /Connected/i text match — "Not connected" contains "connected".
   await expect(new LoginLauncher(window).disconnectButton).toBeVisible({ timeout: 60_000 });
+  // The first connect opens the (being-replaced) Getting Started walkthrough over
+  // the editor; close it so this chapter's screenshot shows the connected UI.
+  await dismissWalkthrough(window);
 });

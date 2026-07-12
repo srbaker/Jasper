@@ -6,13 +6,14 @@
  * iframe.webview → #active-frame.
  */
 import { Page, FrameLocator, Locator } from '@playwright/test';
+import { jasperWebview } from './webview';
 
 export class LoginLauncher {
   constructor(private readonly page: Page) {}
 
-  /** The launcher's webview document. */
+  /** The launcher's webview document (Jasper's webview, not the built-in Chat). */
   private get frame(): FrameLocator {
-    return this.page.frameLocator('iframe.webview').frameLocator('#active-frame');
+    return jasperWebview(this.page);
   }
 
   /** The header/menu row for a configured login (matched by its label text). */

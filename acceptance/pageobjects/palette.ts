@@ -11,6 +11,6 @@ export async function runCommand(page: Page, name: string): Promise<void> {
   await expect(palette).toBeVisible();
   await page.keyboard.type(name);
   const row = palette.locator('.monaco-list-row').filter({ hasText: name }).first();
-  await expect(row).toBeVisible();
+  await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click();
 }

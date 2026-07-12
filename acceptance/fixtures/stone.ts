@@ -77,6 +77,11 @@ export function loginSettings(stone: TestStone): Record<string, unknown> {
         gs_user: stone.user,
         gs_password: stone.password,
         netldi: stone.netldi,
+        // Disable the class-mirror sync (a real per-login option). The suite
+        // doesn't exercise Find-in-Files, and the sync of ~1100 kernel classes
+        // monopolizes the extension host right after login, stalling the very
+        // next command — pure overhead + flakiness for these tests.
+        sync_classes: false,
       },
     ],
   };
