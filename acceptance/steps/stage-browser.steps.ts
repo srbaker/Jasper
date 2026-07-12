@@ -34,3 +34,11 @@ Then('the Stage Browser shows the {string} class and its methods', async ({ wind
 
   await screen('The Stage Browser, homed in on a class and its methods');
 });
+
+Then('the hierarchy shows {string} above {string}', async ({ window, screen }, ancestor: string, cls: string) => {
+  const sb = new StageBrowser(window);
+  await sb.openPane('Hierarchy');
+  await expect(sb.row('Hierarchy', ancestor)).toBeVisible({ timeout: 30_000 });
+  await expect(sb.row('Hierarchy', cls)).toBeVisible({ timeout: 15_000 });
+  await screen('A class in its hierarchy — superclasses above, subclasses below');
+});

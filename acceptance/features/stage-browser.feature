@@ -10,3 +10,9 @@ Feature: The Stage Browser
     Given I am logged in to the test stone
     When I find the "Array" class in the browser
     Then the Stage Browser shows the "Array" class and its methods
+
+  @stone
+  Scenario: Seeing where a class sits in the hierarchy
+    Given I am logged in to the test stone
+    When I find the "Array" class in the browser
+    Then the hierarchy shows "Object" above "Array"
