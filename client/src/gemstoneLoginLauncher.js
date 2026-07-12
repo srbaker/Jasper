@@ -4,8 +4,7 @@
 (function () {
   let vscode;
   let root;
-  let menuOpen = false;
-  let state = { groups: [], hasLogins: false };
+  let state = { hasAny: false, activeSessions: [], databases: [], otherLogins: [] };
 
   const ICONS = {
     play: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5-9-5.5z"/></svg>',
@@ -28,25 +27,43 @@
     vscode.postMessage(msg);
   }
 
-  function menuHtml() {
-    const groups = state.groups
-      .map((g) => {
-        const items = g.logins
-          .map((l) => {
-            const sel = l.id === state.selectedId ? ' sel' : '';
-            const recent = l.id === state.mruId ? '<span class="mi-recent">recent</span>' : '';
-            return `<div class="menu-item${sel}" data-act="select" data-id="${esc(l.id)}">
-              <span class="mi-dot${l.connected ? ' on' : ''}"></span>
-              <span class="mi-label">${esc(l.who)} ${esc(l.where)} (${esc(l.host)})</span>${recent}
-            </div>`;
-          })
-          .join('');
-        return `<div class="menu-group">${esc(g.db)}</div>${items}`;
-      })
-      .join('');
-    return `<div class="menu"${menuOpen ? '' : ' hidden'}>
-      ${groups}
-      <div class="menu-item add menu-sep" data-act="addLogin">${ICONS.plus}<span class="mi-label">New Login…</span></div>
+  function activeHtml(s) {
+    return `<div class="row active">
+      <span class="rdot on"></span>
+      <span class="rlabel"><span class="who">${esc(s.who)}</span> <span class="where">${esc(s.where)} (${esc(s.host)})</span></span>
+      <button class="iconbtn stop" data-act="disconnect" data-id="${esc(s.id)}" title="Log out">${ICONS.stop}</button>
+    </div>`;
+  }
+
+  function loginRowHtml(l) {
+    return `<div class="row login">
+      <span class="rdot"></span>
+      <span class="rlabel"><span class="who">${esc(l.who)}</span> <span class="where">(${esc(l.host)})</span></span>
+      <button class="iconbtn play" data-act="connect" data-id="${esc(l.id)}" title="Log in">${ICONS.play}</button>
+    </div>`;
+  }
+
+  function dbHtml(db) {
+    const badge = db.running
+      ? '<span class="badge on">running</span>'
+      : '<span class="badge">stopped</span>';
+    const body = db.logins.length
+      ? db.logins.map(loginRowHtml).join('')
+      : `<div class="row nologin">
+          <span class="rlabel muted">No login yet</span>
+          <button class="iconbtn play" data-act="addLoginToDb" data-stone="${esc(db.stoneName)}" title="Add a login and connect">${ICONS.plus}</button>
+        </div>`;
+    return `<div class="db">
+      <div class="db-head"><span class="db-name">${esc(db.stoneName)}</span><span class="db-ver">${esc(db.version)}</span>${badge}</div>
+      ${body}
+    </div>`;
+  }
+
+  function footerHtml() {
+    return `<div class="footer">
+      <button class="linkact" data-act="addLogin">${ICONS.plus}<span>Add login</span></button>
+      <button class="linkact" data-act="setupOptions">${ICONS.bolt}<span>New database</span></button>
+      <button class="linkact" data-act="connectExisting">${ICONS.plug}<span>Existing stone</span></button>
     </div>`;
   }
 
@@ -79,73 +96,36 @@
   }
 
   function render() {
-    if (!state.hasLogins) {
+    if (!state.hasAny) {
       root.innerHTML = firstRunHtml();
       return;
     }
-    const sel = state.selected;
-    const connected = !!(sel && sel.connected);
-    const label = sel
-      ? `<span class="who">${esc(sel.who)}</span> <span class="where">${esc(sel.where)}</span>`
-      : '<span class="where">Select a login…</span>';
-    const power = connected
-      ? `<button class="iconbtn stop" data-act="disconnect" data-id="${esc(sel.id)}" title="Log out">${ICONS.stop}</button>`
-      : `<button class="iconbtn play" data-act="connect" data-id="${esc(sel ? sel.id : '')}" title="Log in">${ICONS.play}</button>`;
-    const status = connected
-      ? `<span class="dot on"></span>Connected — ${esc(sel.who)} ${esc(sel.where)}`
-      : `<span class="dot"></span>Not connected · press ▶ to log in`;
-
-    root.innerHTML = `
-      <div class="launch-row">
-        <div class="select" data-act="toggleMenu">
-          <span class="lead${connected ? ' on' : ''}">${ICONS.key}</span>
-          <span class="label">${label}</span>
-          <span class="caret">${ICONS.caret}</span>
-        </div>
-        ${power}
-        <button class="iconbtn" data-act="addLogin" title="Add login">${ICONS.plus}</button>
-      </div>
-      <div class="status">${status}</div>
-      ${menuHtml()}`;
+    let html = '';
+    if (state.activeSessions.length) {
+      html += `<div class="sec">${state.activeSessions.map(activeHtml).join('')}</div>`;
+    }
+    if (state.databases.length) {
+      if (state.activeSessions.length) html += `<div class="sec-label">Databases</div>`;
+      html += state.databases.map(dbHtml).join('');
+    }
+    if (state.otherLogins.length) {
+      html += `<div class="sec-label">Other logins</div>${state.otherLogins.map(loginRowHtml).join('')}`;
+    }
+    html += footerHtml();
+    root.innerHTML = html;
   }
 
   function onClick(e) {
     const el = e.target.closest('[data-act]');
-    if (!el) {
-      if (menuOpen) {
-        menuOpen = false;
-        render();
-      }
-      return;
-    }
+    if (!el) return;
     const act = el.dataset.act;
     const id = el.dataset.id;
-    if (act === 'toggleMenu') {
-      menuOpen = !menuOpen;
-      render();
-      return;
-    }
-    if (act === 'select') {
-      menuOpen = false;
-      post({ command: 'select', id });
-      return;
-    }
-    if (act === 'connect' && id) {
-      post({ command: 'connect', id });
-      return;
-    }
-    if (act === 'disconnect' && id) {
-      post({ command: 'disconnect', id });
-      return;
-    }
-    if (act === 'addLogin') {
-      menuOpen = false;
-      post({ command: 'addLogin' });
-      return;
-    }
+    if (act === 'connect' && id) return void post({ command: 'connect', id });
+    if (act === 'disconnect' && id) return void post({ command: 'disconnect', id });
+    if (act === 'addLogin') return void post({ command: 'addLogin' });
+    if (act === 'addLoginToDb') return void post({ command: 'addLoginToDb', stone: el.dataset.stone });
     if (act === 'magicStart' || act === 'setupOptions' || act === 'connectExisting') {
-      post({ command: act });
-      return;
+      return void post({ command: act });
     }
   }
 
@@ -158,14 +138,11 @@
       const msg = ev.data;
       if (msg && msg.command === 'state') {
         state = msg.state;
-        // A fresh render implicitly closes the menu unless the update was a
-        // pure selection change from an open menu; simplest is to close it.
-        menuOpen = false;
         render();
       }
     });
   }
 
   const g = typeof globalThis !== 'undefined' ? globalThis : window;
-  g.GemstoneLoginLauncher = { init, render, menuHtml };
+  g.GemstoneLoginLauncher = { init, render };
 })();

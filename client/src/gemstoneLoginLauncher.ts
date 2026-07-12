@@ -21,6 +21,8 @@ import * as fs from 'fs';
 
 import { LoginStorage } from './loginStorage';
 import { SessionManager } from './sessionManager';
+import { SysadminStorage } from './sysadminStorage';
+import { ProcessManager } from './processManager';
 import { GemStoneLogin, loginLabel, sameLoginTarget } from './loginTypes';
 
 const launcherJs = fs.readFileSync(
@@ -33,6 +35,9 @@ const MRU_KEY = 'gemstone.launcher.mruLogin';
 export interface LoginLauncherDeps {
   storage: LoginStorage;
   sessionManager: SessionManager;
+  sysadminStorage: SysadminStorage;
+  /** Lazy: the ProcessManager is constructed after this provider, so reach it on demand. */
+  processManager: () => ProcessManager;
   globalState: vscode.Memento;
 }
 
@@ -42,32 +47,40 @@ interface LauncherLogin {
   id: string;
   who: string;
   where: string;
-  stone: string;
-  version: string;
   host: string;
-  connected: boolean;
 }
 
-interface LoginGroup {
-  db: string;
-  logins: LauncherLogin[];
+/** A live session, shown up top. */
+interface LauncherSession {
+  id: string; // its login's id
+  who: string;
+  where: string;
+  host: string;
+}
+
+/** A local database (the god object) with its status and its idle logins nested. */
+interface LauncherDatabase {
+  stoneName: string;
+  version: string;
+  running: boolean;
+  logins: LauncherLogin[]; // idle (not-connected) logins for this database
 }
 
 interface LauncherState {
-  groups: LoginGroup[];
-  selectedId?: string;
-  mruId?: string;
-  hasLogins: boolean;
-  /** The selected login, flattened for the header. */
-  selected?: LauncherLogin;
+  /** Anything at all — else the first-run chooser shows. */
+  hasAny: boolean;
+  activeSessions: LauncherSession[];
+  databases: LauncherDatabase[];
+  /** Idle logins with no matching local database (seed of a future Remote group). */
+  otherLogins: LauncherLogin[];
 }
 
 type Inbound =
   | { command: 'ready' }
-  | { command: 'select'; id: string }
   | { command: 'connect'; id: string }
   | { command: 'disconnect'; id: string }
   | { command: 'addLogin' }
+  | { command: 'addLoginToDb'; stone: string }
   | { command: 'magicStart' }
   | { command: 'setupOptions' }
   | { command: 'connectExisting' };
@@ -76,7 +89,6 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
   static readonly viewType = 'gemstoneLoginLauncher';
 
   private view?: vscode.WebviewView;
-  private selectedId?: string;
 
   constructor(private readonly deps: LoginLauncherDeps) {}
 
@@ -103,15 +115,10 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
       case 'ready':
         this.post();
         return;
-      case 'select':
-        this.selectedId = msg.id;
-        this.post();
-        return;
       case 'connect': {
         const login = this.findLogin(msg.id);
         if (!login) return;
-        this.selectedId = msg.id;
-        // Record the intent as most-recently-used so it is the default next time.
+        // Record the intent as most-recently-used (seed for a future Recent list).
         await this.deps.globalState.update(MRU_KEY, msg.id);
         await vscode.commands.executeCommand('gemstone.login', { login });
         this.post();
@@ -126,6 +133,11 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
       }
       case 'addLogin':
         await vscode.commands.executeCommand('gemstone.addLogin');
+        this.post();
+        return;
+      case 'addLoginToDb':
+        // Pre-fill a new login for this database's stone (the +Add on a login-less DB).
+        await vscode.commands.executeCommand('gemstone.addLogin', { stone: msg.stone });
         this.post();
         return;
       // First-run chooser (empty Sessions view).
@@ -163,44 +175,52 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
   private buildState(): LauncherState {
     const logins = this.deps.storage.getLogins();
     const sessions = this.deps.sessionManager.getSessions();
+    const dbs = this.deps.sysadminStorage.getDatabases();
+    const pm = this.deps.processManager();
 
-    const flat: LauncherLogin[] = logins.map((l) => ({
+    const isLocal = (host: string) => !host || host === 'localhost' || host === '127.0.0.1';
+    const connectedOf = (l: GemStoneLogin) => sessions.some((s) => sameLoginTarget(s.login, l));
+    const toLogin = (l: GemStoneLogin): LauncherLogin => ({
       id: loginLabel(l),
       who: l.gs_user,
       where: `on ${l.stone}`,
-      stone: l.stone,
-      version: l.version,
       host: l.gem_host,
-      connected: sessions.some((s) => sameLoginTarget(s.login, l)),
+    });
+
+    // Live sessions lead.
+    const activeSessions: LauncherSession[] = sessions.map((s) => ({
+      id: loginLabel(s.login),
+      who: s.login.gs_user,
+      where: `on ${s.login.stone}`,
+      host: s.login.gem_host,
     }));
 
-    // Default selection: keep a valid manual pick; otherwise prefer a connected
-    // login, then the most-recently-used, then the first configured login.
-    const mruId = this.deps.globalState.get<string>(MRU_KEY);
-    if (!this.selectedId || !flat.some((f) => f.id === this.selectedId)) {
-      const connected = flat.find((f) => f.connected);
-      const mru = flat.find((f) => f.id === mruId);
-      this.selectedId = connected?.id ?? mru?.id ?? flat[0]?.id;
-    }
+    // Local databases (god objects): running status + their idle logins nested. A
+    // login matches by local host + stone name. Connected logins are claimed here
+    // (so they don't fall into "other") but shown up top as active sessions.
+    const claimed = new Set<GemStoneLogin>();
+    const databases: LauncherDatabase[] = dbs.map((db) => {
+      const cfg = db.config;
+      const matches = logins.filter((l) => isLocal(l.gem_host) && l.stone === cfg.stoneName);
+      matches.forEach((l) => claimed.add(l));
+      return {
+        stoneName: cfg.stoneName,
+        version: cfg.version,
+        running: pm.isStoneRunning(cfg.stoneName, cfg.version),
+        logins: matches.filter((l) => !connectedOf(l)).map(toLogin),
+      };
+    });
 
-    // Group by database (stone + version), preserving first-seen order.
-    const groups: LoginGroup[] = [];
-    for (const f of flat) {
-      const db = `${f.stone} — ${f.version}`;
-      let group = groups.find((g) => g.db === db);
-      if (!group) {
-        group = { db, logins: [] };
-        groups.push(group);
-      }
-      group.logins.push(f);
-    }
+    // Idle logins with no matching local database.
+    const otherLogins = logins
+      .filter((l) => !claimed.has(l) && !connectedOf(l))
+      .map(toLogin);
 
     return {
-      groups,
-      selectedId: this.selectedId,
-      mruId: flat.some((f) => f.id === mruId) ? mruId : undefined,
-      hasLogins: flat.length > 0,
-      selected: flat.find((f) => f.id === this.selectedId),
+      hasAny: sessions.length > 0 || logins.length > 0 || databases.length > 0,
+      activeSessions,
+      databases,
+      otherLogins,
     };
   }
 
@@ -294,6 +314,30 @@ body {
 .fr-text { display: flex; flex-direction: column; gap: 2px; }
 .fr-title { font-size: 12.5px; font-weight: 600; }
 .fr-sub { font-size: 11px; opacity: .85; line-height: 1.35; }
+
+/* Populated Sessions view: active sessions, databases with nested logins, footer */
+.sec { margin: 2px 0 6px; }
+.sec-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground, #9d9d9d); margin: 10px 2px 3px; }
+.row { display: flex; align-items: center; gap: 7px; padding: 4px; border-radius: 5px; }
+.row:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.08)); }
+.row.active { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.10)); }
+.rdot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--vscode-descriptionForeground, #777); }
+.rdot.on { background: var(--vscode-testing-iconPassed, #2ea043); }
+.rlabel { flex: 1 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rlabel .who { font-weight: 600; }
+.rlabel .where { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.rlabel.muted { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.db { margin: 4px 0; }
+.db-head { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 11px; }
+.db-name { font-weight: 600; }
+.db-ver { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.db .row { margin-left: 10px; }
+.badge { margin-left: auto; font-size: 10px; padding: 0 6px; border-radius: 999px; color: var(--vscode-descriptionForeground, #9d9d9d); border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.3)); }
+.badge.on { color: var(--vscode-testing-iconPassed, #2ea043); border-color: currentColor; }
+.footer { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 12px 2px 2px; padding-top: 8px; border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.2)); }
+.linkact { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; color: var(--vscode-textLink-foreground, #3794ff); cursor: pointer; font: inherit; font-size: 11px; padding: 2px; }
+.linkact:hover { text-decoration: underline; }
+.linkact svg { width: 13px; height: 13px; }
 
 /* Dropdown */
 .menu {

@@ -541,6 +541,8 @@ export function activate(context: vscode.ExtensionContext) {
   const loginLauncherProvider = new GemstoneLoginLauncherProvider({
     storage,
     sessionManager,
+    sysadminStorage,
+    processManager: () => processManager,
     globalState: context.globalState,
   });
   // Drive the `gemstone.connected` context key from whether any session is
