@@ -24,16 +24,25 @@ import {
 import { CodeExecutor } from './codeExecutor';
 import { SystemBrowser } from './systemBrowser';
 import { obtainSystemUserSession, refreshWorkingSession } from './systemUserSession';
-import {
-  startSeasideServer,
-  stopSeasideServer,
-  stopAllSeasideServers,
-  SEASIDE_DEFAULT_PORT,
-} from './seasideServer';
-import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, updateGitRepo, normalizeGitUrl } from './rowanLoad';
+import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl } from './rowanLoad';
 import { NbCancelledError } from './nbRunner';
 import { RowanRepoRegistry } from './rowanRepos';
 import { RowanTreeProvider, RowanRepoItem, RowanLoadedProjectItem, RowanChangesProjectItem } from './rowanTreeProvider';
+import { isRowanProjectRoot, readRowanWorkspaceProject } from './rowanProject';
+import { RowanProjectTreeProvider } from './rowanProjectView';
+import { createRowanProject } from './rowanCreate';
+import { mergeCatalog, RowanCatalogEntry } from './rowanCatalog';
+import { addPreloadDependency, listPreloadDependencies, removePreloadDependency } from './rowanDependency';
+import {
+  setProjectSpecField,
+  renameProject,
+  addProjectPackage,
+  addProjectComponent,
+  listComponents,
+  isValidRowanName,
+} from './rowanMetadata';
+import { StonEditorProvider } from './stonEditor';
+import { StonSymbolProvider } from './stonSymbols';
 import { RowanDecorationProvider } from './rowanDecorations';
 import { GlobalsBrowser } from './globalsBrowser';
 import { CommentBrowser } from './commentBrowser';
@@ -48,6 +57,7 @@ import { supportsEnhancedInspector } from './enhancedInspectorInstall';
 import { DebuggerPanel } from './debuggerPanel';
 import { InlineValuesCodeLensProvider } from './inlineValuesCodeLens';
 import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession } from './gemstoneFileSystemProvider';
+import { TonelMethodFileSystemProvider } from './tonelMethodFs';
 import { openWorkspace } from './workspace';
 import { openTutorialNotebook } from './tutorialNotebook';
 import { GemStoneDebugSession } from './gemstoneDebugSession';
@@ -362,6 +372,47 @@ async function loadRowanFromDirectory(
   // The load committed on the SystemUser session; refresh the working session's
   // view so the new project is visible.
   await refreshWorkingSession(session, sessionManager, `Rowan project "${result.detail}" loaded.`);
+}
+
+// Write a loaded Rowan project's image state back to its own on-disk Tonel
+// source, in place (the inverse of loadRowanFromDirectory). Overwrites the disk
+// source with the image's version, so confirm first; the changes then show up in
+// Source Control for the user to git-commit. Clearing the dirty flag mutates
+// Rowan's system registry, so it runs over a transient SystemUser session.
+async function commitRowanFromDirectory(
+  session: ActiveSession, dir: string, sessionManager: SessionManager,
+): Promise<void> {
+  const projectName = readRowanWorkspaceProject(dir)?.name ?? path.basename(dir);
+  const choice = await vscode.window.showWarningMessage(
+    `Write the image's "${projectName}" back to its Tonel source on disk?`,
+    {
+      modal: true,
+      detail: 'This overwrites the on-disk source with the image\'s version. Review and commit the changes in Source Control afterward.',
+    },
+    'Commit to Disk',
+  );
+  if (choice !== 'Commit to Disk') return;
+
+  const sys = await obtainSystemUserSession(session, `commit Rowan project "${projectName}" to disk`);
+  if (!sys) return;
+  let result;
+  try {
+    result = queries.commitRowanProject(sys, projectName);
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(`Commit of "${projectName}" to disk failed: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  } finally {
+    try { session.gci.GciTsLogout(sys.handle); } catch { /* transient session */ }
+  }
+
+  if (!result.success) {
+    vscode.window.showErrorMessage(`Commit of "${projectName}" to disk failed: ${result.detail}`);
+    return;
+  }
+  await refreshWorkingSession(
+    session, sessionManager,
+    `"${projectName}" written to disk — review and commit the changes in Source Control.`,
+  );
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -1152,63 +1203,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('gemstone.serveSeaside', async () => {
-      const session = sessionManager.getSelectedSession();
-      if (!session) {
-        vscode.window.showErrorMessage('Connect to a GemStone session before serving Seaside.');
-        return;
-      }
-      const host = session.login.gem_host;
-      if (host !== 'localhost' && host !== '127.0.0.1') {
-        vscode.window.showErrorMessage(
-          'Serve Seaside currently supports a local stone (the server runs where the stone does).',
-        );
-        return;
-      }
-      const version = session.login.version;
-      const gciPath = storage.getGciLibraryPath(version);
-      const gemstonePath =
-        sysadminStorage.getGemstonePath(version) ??
-        (gciPath ? path.dirname(path.dirname(gciPath)) : undefined);
-      if (!gemstonePath) {
-        vscode.window.showErrorMessage(
-          `Could not locate the GemStone ${version} install for this session.`,
-        );
-        return;
-      }
-      const globalDir = sysadminStorage.getRootPath();
-      try {
-        const url = await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Starting Seaside server…' },
-          () => startSeasideServer({ session, gemstonePath, globalDir }),
-        );
-        // Prefer the integrated browser; fall back to the external one if this
-        // editor build has no Simple Browser.
-        try {
-          await vscode.commands.executeCommand('simpleBrowser.show', url);
-        } catch {
-          await vscode.env.openExternal(vscode.Uri.parse(url));
-        }
-        vscode.window.showInformationMessage(`Seaside is serving at ${url}`);
-      } catch (e) {
-        vscode.window.showErrorMessage(
-          `Serve Seaside failed: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }),
-
-    vscode.commands.registerCommand('gemstone.stopSeaside', async () => {
-      if (stopSeasideServer(SEASIDE_DEFAULT_PORT)) {
-        vscode.window.showInformationMessage(
-          `Stopped the Seaside server on port ${SEASIDE_DEFAULT_PORT}.`,
-        );
-      } else {
-        vscode.window.showInformationMessage(
-          `No Seaside server is running on port ${SEASIDE_DEFAULT_PORT}.`,
-        );
-      }
-    }),
-
     vscode.commands.registerCommand('gemstone.sessionCommit', async (item: GemStoneSessionItem) => {
       if (fileInManager.hasUnsavedChanges(item.activeSession)) {
         const choice = await vscode.window.showWarningMessage(
@@ -1337,52 +1331,6 @@ export function activate(context: vscode.ExtensionContext) {
         dictName: picked.cls.symbolDict, className: picked.cls.name,
         isMeta: false, selector: '', category: '',
       });
-    }),
-
-    vscode.commands.registerCommand('gemstone.loadRowanProject', async () => {
-      const session = await sessionManager.resolveSession();
-      if (!session) return;
-
-      const folder = await vscode.window.showOpenDialog({
-        canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
-        openLabel: 'Load Project', title: 'Select a Rowan project directory to load',
-      });
-      if (!folder || folder.length === 0) return;
-
-      await loadRowanFromDirectory(session, folder[0].fsPath, sessionManager);
-      void vscode.commands.executeCommand('gemstone.rowanRefreshView');
-    }),
-
-    vscode.commands.registerCommand('gemstone.loadRowanProjectFromGit', async () => {
-      const session = await sessionManager.resolveSession();
-      if (!session) return;
-
-      const raw = (await vscode.window.showInputBox({
-        prompt: 'Git repository URL of the Rowan project',
-        placeHolder: 'https://github.com/owner/repo.git',
-        ignoreFocusOut: true,
-        validateInput: validateRowanGitUrl,
-      }))?.trim();
-      if (!raw) return;
-      const url = normalizeGitUrl(raw);
-
-      // Clone into the open workspace folder.
-      const dest = rowanWorkspaceDest(deriveRepoName(url));
-      if (!dest) return;
-      if (!fs.existsSync(dest)) {
-        try {
-          await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: `Cloning ${url}…`, cancellable: false },
-            () => cloneGitRepo(url, dest),
-          );
-        } catch (e: unknown) {
-          vscode.window.showErrorMessage(`git clone failed: ${e instanceof Error ? e.message : String(e)}`);
-          return;
-        }
-      }
-
-      await loadRowanFromDirectory(session, dest, sessionManager);
-      void vscode.commands.executeCommand('gemstone.rowanRefreshView');
     }),
 
     vscode.commands.registerCommand('gemstone.unloadRowanProject', async (nameArg?: string | RowanLoadedProjectItem) => {
@@ -2330,7 +2278,133 @@ export function activate(context: vscode.ExtensionContext) {
   const rowanProvider = new RowanTreeProvider(rowanRegistry, {
     getSession: () => sessionManager.getSelectedSession() ?? null,
   });
+  // The Rowan project at the open workspace root, shown as a section in the
+  // Explorer (contributed only when gemstone.workspaceIsRowanProject). Its
+  // packages are read from disk — co-located with the file tree, no stone.
+  // .ston files open by default in an Xcode-build-settings-style editable
+  // settings grid (StonEditorProvider); "View as Text" / Reopen With… drops to
+  // the plain, syntax-highlighted source. The two title-bar commands toggle
+  // between the two views.
+  // The .ston being viewed: the command arg (from the title-bar menu), else the
+  // active tab's resource — its input carries the URI for both the text editor
+  // and the custom settings editor.
+  const activeStonUri = (uri?: vscode.Uri): vscode.Uri | undefined => {
+    if (uri instanceof vscode.Uri) return uri;
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { uri?: vscode.Uri } | undefined;
+    const candidate = input?.uri ?? vscode.window.activeTextEditor?.document.uri;
+    return candidate?.fsPath.endsWith('.ston') ? candidate : undefined;
+  };
   context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      StonEditorProvider.viewType,
+      new StonEditorProvider({
+        getSession: () => sessionManager.getSelectedSession() ?? null,
+        onDidChangeSession: sessionManager.onDidChangeSelection,
+        getLogins: () => storage.getLogins(),
+        loadProject: async (root: string) => {
+          const session = await sessionManager.resolveSession();
+          if (session) await loadRowanFromDirectory(session, root, sessionManager);
+        },
+        commitProject: async (root: string) => {
+          const session = await sessionManager.resolveSession();
+          if (session) await commitRowanFromDirectory(session, root, sessionManager);
+        },
+      }),
+      { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false },
+    ),
+    vscode.languages.registerDocumentSymbolProvider({ language: 'ston' }, new StonSymbolProvider()),
+    vscode.commands.registerCommand('gemstone.stonViewSource', async (uri?: vscode.Uri) => {
+      const target = activeStonUri(uri);
+      if (target) await vscode.commands.executeCommand('vscode.openWith', target, 'default');
+    }),
+    vscode.commands.registerCommand('gemstone.stonViewSettings', async (uri?: vscode.Uri) => {
+      const target = activeStonUri(uri);
+      if (target) await vscode.commands.executeCommand('vscode.openWith', target, StonEditorProvider.viewType);
+    }),
+  );
+
+  const rowanProjectProvider = new RowanProjectTreeProvider();
+  const rowanProjectView = vscode.window.createTreeView('gemstoneRowanProject', {
+    treeDataProvider: rowanProjectProvider,
+  });
+  const refreshRowanProjectView = () => {
+    rowanProjectProvider.refresh();
+    rowanProjectView.description = rowanProjectProvider.projectName();
+  };
+  // Disk-first per-method editing: a tonel-method:// document is one method
+  // sliced out of its .class.st (editable, saves back in place). Clicking a
+  // method row in the project tree opens one.
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider(
+      TonelMethodFileSystemProvider.scheme, new TonelMethodFileSystemProvider(),
+    ),
+    vscode.commands.registerCommand('gemstone.rowanOpenProjectMethod', async (uri: vscode.Uri) => {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.languages.setTextDocumentLanguage(doc, 'gemstone-smalltalk');
+      await vscode.window.showTextDocument(doc, { preview: true });
+    }),
+  );
+  // Resolve a GemStone install that can run the Rowan solo scripts: prefer the
+  // connected session's version, else the first extracted version that ships the
+  // tooling. $GEMSTONE is the sysadmin path, or two dirs up from the GCI library
+  // (…/lib/libgci → install root).
+  // Open a freshly-created project's load-spec manifest with the project name
+  // selected, so the user names it there (the name is metadata, not the folder).
+  const openRowanManifestAtName = async (projectRoot: string, specName: string) => {
+    const manifest = path.join(projectRoot, 'rowan', 'specs', `${specName}.ston`);
+    let doc: vscode.TextDocument;
+    try {
+      doc = await vscode.workspace.openTextDocument(vscode.Uri.file(manifest));
+    } catch {
+      return;
+    }
+    const m = /(#projectName\s*:\s*')([^']*)'/.exec(doc.getText());
+    const selection = m
+      ? new vscode.Range(
+          doc.positionAt(m.index + m[1].length),
+          doc.positionAt(m.index + m[1].length + m[2].length),
+        )
+      : undefined;
+    await vscode.window.showTextDocument(doc, selection ? { selection } : {});
+  };
+  // Prompt for a custom Metacello baseline to add to the (Jasper-owned) catalogue.
+  // A QuickPick over a fixed option set, marking the current value (and including
+  // it when it isn't one of the presets, so an unusual existing value survives).
+  const pickFrom = async (options: string[], current: string, title: string): Promise<string | undefined> => {
+    const opts = options.includes(current) ? options : [current, ...options];
+    const picked = await vscode.window.showQuickPick(
+      opts.map((o) => ({ label: o, description: o === current ? 'current' : undefined })),
+      { title, placeHolder: 'Pick a value' },
+    );
+    return picked?.label;
+  };
+  const promptCustomCatalogEntry = async (): Promise<RowanCatalogEntry | undefined> => {
+    const name = (await vscode.window.showInputBox({ prompt: 'Project name', ignoreFocusOut: true }))?.trim();
+    if (!name) return undefined;
+    const baseline = (await vscode.window.showInputBox({ prompt: `Metacello baseline for "${name}" (e.g. Seaside3)`, ignoreFocusOut: true }))?.trim();
+    if (!baseline) return undefined;
+    const repository = (await vscode.window.showInputBox({
+      prompt: 'Metacello repository URL', placeHolder: 'github://owner/repo:tag/repository', ignoreFocusOut: true,
+    }))?.trim();
+    if (!repository) return undefined;
+    const loadsRaw = (await vscode.window.showInputBox({ prompt: 'Load groups (space-separated; blank = default)', ignoreFocusOut: true }))?.trim();
+    const loads = loadsRaw ? loadsRaw.split(/\s+/) : ['default'];
+    return { name, description: '', projectUrl: '', baseline, repository, loads };
+  };
+  // Recognize when the open workspace root is itself a Rowan project — gates the
+  // Explorer section's visibility. Passive: no effect when it isn't one.
+  const refreshRowanWorkspaceContext = () => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    vscode.commands.executeCommand(
+      'setContext',
+      'gemstone.workspaceIsRowanProject',
+      !!root && isRowanProjectRoot(root),
+    );
+  };
+  refreshRowanWorkspaceContext();
+  refreshRowanProjectView();
+  context.subscriptions.push(
+    rowanProjectView,
     vscode.window.createTreeView('gemstoneRowan', {
       treeDataProvider: rowanProvider,
     }),
@@ -2338,9 +2412,294 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerFileDecorationProvider(new RowanDecorationProvider()),
     // Loaded-projects section tracks the connected stone.
     sessionManager.onDidChangeSelection(() => rowanProvider.refresh()),
+    // The workspace root defines the Rowan project — re-evaluate on folder change.
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      refreshRowanWorkspaceContext();
+      rowanProvider.refresh();
+      refreshRowanProjectView();
+    }),
 
     vscode.commands.registerCommand('gemstone.rowanRefreshView', () => {
       rowanProvider.refresh();
+    }),
+
+    vscode.commands.registerCommand('gemstone.rowanAddPackage', async () => {
+      const CATALOG_USER_KEY = 'gemstone.rowanCatalogUserEntries';
+      const userEntries = context.globalState.get<RowanCatalogEntry[]>(CATALOG_USER_KEY, []);
+      const ADD_CUSTOM = '$(add) Add a custom Metacello baseline…';
+      type Item = vscode.QuickPickItem & { entry?: RowanCatalogEntry };
+      const items: Item[] = [
+        { label: ADD_CUSTOM, alwaysShow: true },
+        { label: 'Catalogue', kind: vscode.QuickPickItemKind.Separator },
+        ...mergeCatalog(userEntries).map((e): Item => ({
+          label: e.name,
+          description: e.baseline,
+          detail: e.description || e.repository,
+          entry: e,
+        })),
+      ];
+      const picked = await vscode.window.showQuickPick(items, {
+        title: 'Add Dependency — declare a Metacello baseline',
+        placeHolder: 'Pick a project to add, or declare your own baseline',
+        matchOnDescription: true,
+        matchOnDetail: true,
+      });
+      if (!picked) return;
+
+      let entry = picked.entry;
+      if (!entry) {
+        entry = await promptCustomCatalogEntry();
+        if (!entry) return;
+        await context.globalState.update(
+          CATALOG_USER_KEY,
+          [...userEntries.filter((e) => e.name !== entry!.name), entry],
+        );
+      }
+
+      // Declare-only: write the Metacello recipe into the project's Core
+      // component as a pre-load doit (disk; loads when the project loads). No
+      // stone needed. Loading/adopting into a running stone is a later workflow.
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project first — the dependency is declared in its Core component.');
+        return;
+      }
+      const result = addPreloadDependency(root, entry);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add ${entry.name}: ${result.error}`);
+        return;
+      }
+      rowanProvider.refresh();
+      refreshRowanProjectView();
+      void vscode.window.showInformationMessage(
+        result.alreadyPresent
+          ? `${entry.name} is already a dependency of this project.`
+          : `Added ${entry.name} as a dependency.`,
+      );
+    }),
+
+    // Edit the project's core metadata (name, package format, package convention)
+    // via native pickers, writing back to project.ston / the load spec.
+    vscode.commands.registerCommand('gemstone.rowanEditProjectMetadata', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const project = root && isRowanProjectRoot(root) ? readRowanWorkspaceProject(root) : null;
+      if (!root || !project) {
+        vscode.window.showErrorMessage('Open a Rowan project to edit its metadata.');
+        return;
+      }
+      const fmt = project.packageFormat ?? 'tonel';
+      const conv = project.packageConvention ?? 'RowanHybrid';
+      type Field = 'name' | 'format' | 'convention';
+      const field = await vscode.window.showQuickPick(
+        [
+          { label: '$(tag) Name', description: project.name, field: 'name' as Field },
+          { label: '$(file-code) Package format', description: fmt, field: 'format' as Field },
+          { label: '$(list-tree) Package convention', description: conv, field: 'convention' as Field },
+        ],
+        { title: `Edit ${project.name}`, placeHolder: 'Pick a field to edit' },
+      );
+      if (!field) return;
+
+      const apply = (r: { success: boolean; error?: string }, ok: string): void => {
+        if (!r.success) {
+          vscode.window.showErrorMessage(`Could not update ${project.name}: ${r.error}`);
+          return;
+        }
+        refreshRowanProjectView();
+        vscode.window.showInformationMessage(ok);
+      };
+
+      if (field.field === 'name') {
+        const newName = (await vscode.window.showInputBox({
+          title: 'Rename project', value: project.name, ignoreFocusOut: true,
+          validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+        }))?.trim();
+        if (!newName || newName === project.name) return;
+        apply(renameProject(root, newName), `Renamed project to ${newName}.`);
+      } else if (field.field === 'format') {
+        const value = await pickFrom(['tonel', 'filetree'], fmt, 'Package format');
+        if (!value || value === fmt) return;
+        apply(setProjectSpecField(root, 'packageFormat', value), `Package format is now ${value}.`);
+      } else {
+        const value = await pickFrom(['RowanHybrid', 'Rowan'], conv, 'Package convention');
+        if (!value || value === conv) return;
+        apply(setProjectSpecField(root, 'packageConvention', value), `Package convention is now ${value}.`);
+      }
+    }),
+
+    // Create a new package (directory + properties.st) and register it in a
+    // component so it loads.
+    vscode.commands.registerCommand('gemstone.rowanAddProjectPackage', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to add a package.');
+        return;
+      }
+      const name = (await vscode.window.showInputBox({
+        title: 'Add package', prompt: 'New package name', placeHolder: 'MyProject-Core', ignoreFocusOut: true,
+        validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+      }))?.trim();
+      if (!name) return;
+
+      // Register in a component so the package loads; pick when there's a choice.
+      const components = listComponents(root);
+      let componentName = components[0]?.name ?? 'Core';
+      if (components.length > 1) {
+        const picked = await vscode.window.showQuickPick(components.map((c) => c.name), {
+          title: 'Add package to which component?', placeHolder: 'The package will be listed in this component',
+        });
+        if (!picked) return;
+        componentName = picked;
+      }
+
+      const result = addProjectPackage(root, name, componentName);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add package: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      vscode.window.showInformationMessage(`Added package ${name} to ${componentName}.`);
+    }),
+
+    // Create a new load component and wire it into the project's load spec.
+    vscode.commands.registerCommand('gemstone.rowanAddComponent', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to add a component.');
+        return;
+      }
+      const name = (await vscode.window.showInputBox({
+        title: 'Add component', prompt: 'New component name', placeHolder: 'Tests', ignoreFocusOut: true,
+        validateInput: (v) => (isValidRowanName(v.trim()) ? undefined : 'Use letters, digits, and - . _ only.'),
+      }))?.trim();
+      if (!name) return;
+      const result = addProjectComponent(root, name);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not add component: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      const choice = await vscode.window.showInformationMessage(`Added component ${name}.`, 'Open');
+      if (choice === 'Open' && result.path) {
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(result.path)));
+      }
+    }),
+
+    // List / remove pre-load dependencies (and add, via the catalogue flow).
+    vscode.commands.registerCommand('gemstone.rowanManageDependencies', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root || !isRowanProjectRoot(root)) {
+        vscode.window.showErrorMessage('Open a Rowan project to manage its dependencies.');
+        return;
+      }
+      const deps = listPreloadDependencies(root);
+      const ADD = '$(add) Add dependency…';
+      type Item = vscode.QuickPickItem & { repository?: string; name?: string };
+      const items: Item[] = [
+        { label: ADD, alwaysShow: true },
+        ...(deps.length ? [{ label: 'Dependencies', kind: vscode.QuickPickItemKind.Separator } as Item] : []),
+        ...deps.map((d): Item => ({
+          label: `$(package) ${d.name}`, description: d.baseline, detail: d.repository,
+          repository: d.repository, name: d.name,
+        })),
+      ];
+      const picked = await vscode.window.showQuickPick(items, {
+        title: 'Manage dependencies',
+        placeHolder: deps.length ? 'Pick a dependency to remove, or add one' : 'No dependencies yet — add one',
+        matchOnDetail: true,
+      });
+      if (!picked) return;
+      if (picked.label === ADD) {
+        await vscode.commands.executeCommand('gemstone.rowanAddPackage');
+        return;
+      }
+      if (!picked.repository) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Remove dependency ${picked.name}?`, { modal: true }, 'Remove',
+      );
+      if (confirm !== 'Remove') return;
+      const result = removePreloadDependency(root, picked.repository);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not remove ${picked.name}: ${result.error}`);
+        return;
+      }
+      refreshRowanProjectView();
+      vscode.window.showInformationMessage(`Removed dependency ${picked.name}.`);
+    }),
+
+    vscode.commands.registerCommand('gemstone.rowanNewProject', async () => {
+      const name = (await vscode.window.showInputBox({
+        prompt: 'New Rowan project name',
+        placeHolder: 'MyProject',
+        ignoreFocusOut: true,
+        // The name becomes a folder, so only reject what breaks a folder name —
+        // the project's own name lives in the Rowan metadata, and Rowan itself
+        // accepts hyphens, dots, etc.
+        validateInput: (v) => {
+          const t = v.trim();
+          if (!t) return 'Enter a project name.';
+          if (/[\\/]/.test(t) || t === '.' || t === '..') return 'Avoid /, \\, ".", and ".." — this becomes a folder name.';
+          return undefined;
+        },
+      }))?.trim();
+      if (!name) return;
+
+      const openFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const picked = await vscode.window.showOpenDialog({
+        canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
+        openLabel: 'Create Project Here', title: `Choose where to create "${name}"`,
+        defaultUri: openFolder ? vscode.Uri.file(openFolder) : undefined,
+      });
+      if (!picked || picked.length === 0) return;
+      const dest = path.join(picked[0].fsPath, name);
+      if (fs.existsSync(dest)) {
+        vscode.window.showErrorMessage(`"${dest}" already exists.`);
+        return;
+      }
+      try {
+        fs.mkdirSync(dest, { recursive: true });
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(`Could not create the folder: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+
+      const result = createRowanProject(dest, name);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not create the project: ${result.error}`);
+        return;
+      }
+      const choice = await vscode.window.showInformationMessage(
+        `Created Rowan project "${name}".`, 'Open Project',
+      );
+      if (choice === 'Open Project' && result.projectDir) {
+        await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(result.projectDir));
+      }
+    }),
+
+    vscode.commands.registerCommand('gemstone.rowanInitHere', async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!folder) {
+        vscode.window.showErrorMessage('Open a folder first — this turns the open folder into a Rowan project.');
+        return;
+      }
+      if (isRowanProjectRoot(folder)) {
+        vscode.window.showInformationMessage('This folder is already a Rowan project.');
+        return;
+      }
+      // The open folder IS the project's containing folder; its name becomes the
+      // load spec's file name. The project's own name is metadata the user edits
+      // in the manifest we open right afterward.
+      const name = path.basename(folder);
+
+      const result = createRowanProject(folder, name);
+      if (!result.success) {
+        vscode.window.showErrorMessage(`Could not create the project: ${result.error}`);
+        return;
+      }
+      refreshRowanWorkspaceContext();
+      rowanProvider.refresh();
+      refreshRowanProjectView();
+      await openRowanManifestAtName(folder, name);
     }),
 
     vscode.commands.registerCommand('gemstone.rowanAddRepo', async () => {
@@ -2481,27 +2840,6 @@ export function activate(context: vscode.ExtensionContext) {
       rowanProvider.refresh();
     }),
 
-    vscode.commands.registerCommand('gemstone.rowanUpdateRepo', async (item?: RowanRepoItem) => {
-      if (!item || !item.repo.gitUrl) return;
-      let result: { updated: boolean };
-      try {
-        result = await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Updating ${item.repo.name}…`, cancellable: false },
-          () => updateGitRepo(item.repo.path),
-        );
-      } catch (e: unknown) {
-        vscode.window.showErrorMessage(`Update of "${item.repo.name}" failed: ${e instanceof Error ? e.message : String(e)}`);
-        return;
-      }
-      // Re-read the checkout (a new gemstone.ston, spec, etc. may now be present)
-      // so the row's state — and any cache warning — reflects the update.
-      rowanProvider.refresh();
-      vscode.window.showInformationMessage(
-        result.updated
-          ? `Updated "${item.repo.name}" to the latest from its remote.`
-          : `"${item.repo.name}" is already up to date.`,
-      );
-    }),
   );
 
   // Refresh process state on initial load
@@ -2868,7 +3206,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate(): Thenable<void> | undefined {
-  stopAllSeasideServers();
   if (fileInManager) {
     fileInManager.dispose();
   }

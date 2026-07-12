@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { listRowanProjects } from '../queries/rowan/listRowanProjects';
 import { getGemCacheKB } from '../queries/rowan/getGemCacheKB';
-import { getRowanProjectDetail } from '../queries/rowan/getRowanProjectDetail';
 import { exportRowanProject } from '../queries/rowan/exportRowanProject';
+import { commitRowanProject } from '../queries/rowan/commitRowanProject';
 import { findRowanClassOwners } from '../queries/rowan/findRowanClassOwners';
 import { listAllRowanClasses } from '../queries/rowan/listAllRowanClasses';
 import { loadRowanProject } from '../queries/rowan/loadRowanProject';
@@ -27,32 +27,6 @@ describe('listRowanProjects', () => {
 
   it('reports Rowan unavailable on the sentinel', () => {
     expect(listRowanProjects(executor('!NO_ROWAN')).available).toBe(false);
-  });
-});
-
-describe('getRowanProjectDetail', () => {
-  it('parses the load recipe, joined lists, and trailing comment', () => {
-    const raw = [
-      'name\tSTON', 'isDirty\tfalse', 'isCommitted\ttrue', 'loadedCommitId\t8685ae5b',
-      'commitId\t8685ae5b', 'useGit\tfalse', 'branch\t', 'repositoryRootPath\t/gs/STON',
-      'gitUrl\t', 'remote\t', 'revision\t', 'packageConvention\tRowanHybrid',
-      'defaultSymbolDict\tUserGlobals', 'conditionalAttributes\tgemstone, 3.7',
-      'components\tCore, Tests', 'packageCount\t5', '@@COMMENT@@', 'STON project.',
-    ].join('\n');
-
-    const d = getRowanProjectDetail(executor(raw), 'STON');
-
-    expect(d.found).toBe(true);
-    expect(d.packageConvention).toBe('RowanHybrid');
-    expect(d.defaultSymbolDict).toBe('UserGlobals');
-    expect(d.components).toEqual(['Core', 'Tests']);
-    expect(d.conditionalAttributes).toEqual(['gemstone', '3.7']);
-    expect(d.packageCount).toBe(5);
-    expect(d.comment).toBe('STON project.');
-  });
-
-  it('reports not found on empty result', () => {
-    expect(getRowanProjectDetail(executor(''), 'Ghost').found).toBe(false);
   });
 });
 
@@ -226,6 +200,40 @@ describe('exportRowanProject', () => {
     expect(code).toContain('writeResolvedProject:');
     expect(code).toContain('exportLoadSpecification');
     expect(code).toContain("diskRepositoryRoot: '/out/Cypress'");
+  });
+});
+
+describe('commitRowanProject', () => {
+  it('reports success and the project name on OK', () => {
+    const result = commitRowanProject(executor('OK\tCypress'), 'Cypress');
+
+    expect(result).toEqual({ success: true, detail: 'Cypress' });
+  });
+
+  it('reports failure with the error message on ERR', () => {
+    const result = commitRowanProject(executor('ERR\tProject Cypress is not loaded'), 'Cypress');
+
+    expect(result).toEqual({ success: false, detail: 'Project Cypress is not loaded' });
+  });
+
+  it('writes in place with the dirty-flag-clearing variant, committing the transaction', () => {
+    const execute = executor('OK\tCypress');
+
+    commitRowanProject(execute, 'Cypress');
+
+    const code = execute.mock.calls[0][1];
+    expect(code).toContain('writeProjectNamed:');
+    expect(code).toContain('System commitTransaction');
+    expect(code).toContain('System abortTransaction');
+    expect(code).not.toContain('diskRepositoryRoot:');
+  });
+
+  it('escapes a single quote in the project name', () => {
+    const execute = executor("OK\tO'Hara");
+
+    commitRowanProject(execute, "O'Hara");
+
+    expect(execute.mock.calls[0][1]).toContain("loadedProjectNamed: 'O''Hara'");
   });
 });
 

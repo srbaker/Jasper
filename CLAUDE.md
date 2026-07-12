@@ -31,11 +31,13 @@ npm run package          # produce .vsix package
 
 # Dev helpers
 npm run dev:fresh        # launch the extension in a throwaway editor window (see below)
-npm run serve:seaside    # start a Seaside server gem for the loaded hello app (see below)
 
 # Acceptance tests + living documentation (Gherkin → sandboxed VS Code; see acceptance/)
-npm run test:acceptance         # run the Gherkin scenarios (sandboxed VS Code, off-screen on macOS)
+npm run test:acceptance         # run the Gherkin scenarios (sandboxed VS Code; macOS can't headless it)
 npm run test:acceptance:manual  # regenerate the user manual (Astro site + PDF) from the last run
+# Headless runs (Linux container under Xvfb — no window on macOS, the way to run GUI chapters):
+#   npm --prefix acceptance run test:docker     # run the suite headless in Docker
+#   npm --prefix acceptance run manual:docker   # headless GUI runs → site + PDF on the host
 ```
 
 ### Running the extension in a clean slate
@@ -48,21 +50,6 @@ the keychain-isolation flag the acceptance harness also needs). It compiles the
 extension first if `client/out` is missing; use `npm run watch` + Reload Window
 for a live loop. It does **not** isolate `gemstone.rootPath`, so it still sees
 your real GemStone installs (to connect).
-
-### Serving Seaside
-
-After loading Seaside + the `hello-seaside-rowan` project through Jasper, view
-the app two ways:
-
-- **From the editor:** the **GemStone: Serve Seaside** command
-  (`gemstone.serveSeaside` in `seasideServer.ts`) — spawns a detached serving
-  gem (`WAGsZincAdaptor startOn:` blocks, so it can't run in the GCI session) as
-  SystemUser and opens the URL in the integrated browser; **GemStone: Stop
-  Seaside Server** stops it.
-- **From the shell:** `npm run serve:seaside [-- <port> <stone>]` /
-  `npm run serve:seaside -- stop` (`scripts/serve-seaside.sh`) does the same
-  detached gem; then open `http://localhost:8383/hello` via the editor's
-  "Simple Browser: Show" command.
 
 Run a single test file: `cd client && npx vitest run src/__tests__/extension.test.ts` (or use the equivalent path for the workspace you're in).
 
