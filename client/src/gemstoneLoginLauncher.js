@@ -4,7 +4,7 @@
 (function () {
   let vscode;
   let root;
-  let state = { hasAny: false, activeSessions: [], databases: [], otherLogins: [] };
+  let state = { hasAny: false, activeSessions: [], databases: [], otherLogins: [], recent: [] };
 
   const ICONS = {
     play: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5-9-5.5z"/></svg>',
@@ -15,6 +15,7 @@
     plus: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.5 2h1v5.5H14v1H8.5V14h-1V8.5H2v-1h5.5V2z"/></svg>',
     bolt: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.3 1L3 9h4l-1 6 6.5-8.5H8L9.3 1z"/></svg>',
     plug: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 1v4H4v2a4 4 0 0 0 3 3.9V15h2v-4.1A4 4 0 0 0 12 7V5h-1V1H9v4H7V1H5z"/></svg>',
+    recent: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a6 6 0 1 0 5.7 4.1l-1 .3A5 5 0 1 1 8 3v2l3-2.5L8 0v2zM7.5 4.5v4l3.3 2 .5-.9L8.5 8V4.5h-1z"/></svg>',
   };
 
   function esc(s) {
@@ -56,6 +57,14 @@
     return `<div class="db">
       <div class="db-head"><span class="db-name">${esc(db.stoneName)}</span><span class="db-ver">${esc(db.version)}</span>${badge}</div>
       ${body}
+    </div>`;
+  }
+
+  function recentRowHtml(r) {
+    return `<div class="row recent">
+      <span class="ricon">${ICONS.recent}</span>
+      <span class="rlabel"><span class="who">${esc(r.who)}</span> <span class="where">${esc(r.where)}</span> <span class="ago">· ${esc(r.ago)}</span></span>
+      <button class="iconbtn play" data-act="reconnect" data-key="${esc(r.key)}" title="Reconnect">${ICONS.play}</button>
     </div>`;
   }
 
@@ -111,6 +120,9 @@
     if (state.otherLogins.length) {
       html += `<div class="sec-label">Other logins</div>${state.otherLogins.map(loginRowHtml).join('')}`;
     }
+    if (state.recent && state.recent.length) {
+      html += `<div class="sec-label">Recent</div>${state.recent.map(recentRowHtml).join('')}`;
+    }
     html += footerHtml();
     root.innerHTML = html;
   }
@@ -122,6 +134,7 @@
     const id = el.dataset.id;
     if (act === 'connect' && id) return void post({ command: 'connect', id });
     if (act === 'disconnect' && id) return void post({ command: 'disconnect', id });
+    if (act === 'reconnect') return void post({ command: 'reconnect', key: el.dataset.key });
     if (act === 'addLogin') return void post({ command: 'addLogin' });
     if (act === 'addLoginToDb') return void post({ command: 'addLoginToDb', stone: el.dataset.stone });
     if (act === 'magicStart' || act === 'setupOptions' || act === 'connectExisting') {

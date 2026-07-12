@@ -100,6 +100,7 @@ import { ensureSelfSignedCert, trustCertCommand } from './tlsCert';
 import { ProcessTreeProvider, ProcessItem } from './processTreeProvider';
 import { OsConfigTreeProvider } from './sharedMemoryTreeProvider';
 import { runQuickSetup, magicStart, setupWithOptions, QuickSetupDeps } from './quickSetup';
+import { recordRecentSession } from './recentSessions';
 import {
   isWindows,
   getWslInfo,
@@ -1242,6 +1243,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         session = sessionManager.login(login, gciPath);
         refreshEnhancedInspectorAvailable(session);
+        void recordRecentSession(context.globalState, login);
         treeProvider.refresh();
         vscode.window.showInformationMessage(
           `Connected to ${login.stone} (${session.stoneVersion}) on ${login.gem_host} as ${login.gs_user}`

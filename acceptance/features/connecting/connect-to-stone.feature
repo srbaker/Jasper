@@ -9,3 +9,9 @@ Feature: Connecting to a stone
     Given a login is configured for the test stone
     When I log in
     Then a live session appears under the login
+
+  @stone
+  Scenario: A stone you disconnect from stays one click away under Recent
+    Given I am logged in to the test stone
+    When I log out
+    Then the stone appears under Recent

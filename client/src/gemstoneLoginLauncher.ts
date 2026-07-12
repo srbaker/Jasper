@@ -24,6 +24,7 @@ import { SessionManager } from './sessionManager';
 import { SysadminStorage } from './sysadminStorage';
 import { ProcessManager } from './processManager';
 import { GemStoneLogin, loginLabel, sameLoginTarget } from './loginTypes';
+import { getRecentSessions, recentKey, timeAgo } from './recentSessions';
 
 const launcherJs = fs.readFileSync(
   path.join(__dirname, '..', 'src', 'gemstoneLoginLauncher.js'),
@@ -66,6 +67,15 @@ interface LauncherDatabase {
   logins: LauncherLogin[]; // idle (not-connected) logins for this database
 }
 
+/** A past connection target, for one-click reconnect. */
+interface LauncherRecent {
+  key: string;
+  who: string;
+  where: string;
+  host: string;
+  ago: string;
+}
+
 interface LauncherState {
   /** Anything at all — else the first-run chooser shows. */
   hasAny: boolean;
@@ -73,12 +83,14 @@ interface LauncherState {
   databases: LauncherDatabase[];
   /** Idle logins with no matching local database (seed of a future Remote group). */
   otherLogins: LauncherLogin[];
+  recent: LauncherRecent[];
 }
 
 type Inbound =
   | { command: 'ready' }
   | { command: 'connect'; id: string }
   | { command: 'disconnect'; id: string }
+  | { command: 'reconnect'; key: string }
   | { command: 'addLogin' }
   | { command: 'addLoginToDb'; stone: string }
   | { command: 'magicStart' }
@@ -128,6 +140,20 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
         const session = this.sessionForId(msg.id);
         if (!session) return;
         await vscode.commands.executeCommand('gemstone.sessionLogout', { activeSession: session });
+        this.post();
+        return;
+      }
+      case 'reconnect': {
+        const entry = getRecentSessions(this.deps.globalState).find((r) => recentKey(r) === msg.key);
+        if (!entry) return;
+        // Prefer a saved login for this target (it carries the password/keychain);
+        // otherwise connect with the bare target and let gemstone.login prompt.
+        const saved = this.deps.storage.getLogins().find((l) => recentKey(l) === msg.key);
+        const login: GemStoneLogin = saved ?? {
+          label: '', version: entry.version, gem_host: entry.gem_host, stone: entry.stone,
+          netldi: entry.netldi, gs_user: entry.gs_user, gs_password: '', host_user: '', host_password: '',
+        };
+        await vscode.commands.executeCommand('gemstone.login', { login, skipFolderCheck: true });
         this.post();
         return;
       }
@@ -214,11 +240,25 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
       .filter((l) => !claimed.has(l) && !connectedOf(l))
       .map(toLogin);
 
+    // Recent connection history — quick reconnect, minus anything already live.
+    const activeKeys = new Set(sessions.map((s) => recentKey(s.login)));
+    const recent: LauncherRecent[] = getRecentSessions(this.deps.globalState)
+      .filter((r) => !activeKeys.has(recentKey(r)))
+      .slice(0, 5)
+      .map((r) => ({
+        key: recentKey(r),
+        who: r.gs_user,
+        where: `on ${r.stone}`,
+        host: r.gem_host,
+        ago: timeAgo(r.at),
+      }));
+
     return {
-      hasAny: sessions.length > 0 || logins.length > 0 || databases.length > 0,
+      hasAny: sessions.length > 0 || logins.length > 0 || databases.length > 0 || recent.length > 0,
       activeSessions,
       databases,
       otherLogins,
+      recent,
     };
   }
 
@@ -325,6 +365,9 @@ body {
 .rlabel .who { font-weight: 600; }
 .rlabel .where { color: var(--vscode-descriptionForeground, #9d9d9d); }
 .rlabel.muted { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.rlabel .ago { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.ricon { display: inline-flex; flex: none; color: var(--vscode-descriptionForeground, #9d9d9d); }
+.ricon svg { width: 13px; height: 13px; }
 .db { margin: 4px 0; }
 .db-head { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 11px; }
 .db-name { font-weight: 600; }

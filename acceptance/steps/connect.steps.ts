@@ -11,6 +11,7 @@ import { test } from '../fixtures/test';
 import { Workbench } from '../pageobjects/workbench';
 import { LoginLauncher } from '../pageobjects/loginLauncher';
 import { dismissWalkthrough } from '../pageobjects/walkthrough';
+import { jasperWebview } from '../pageobjects/webview';
 
 const { Given, When, Then } = createBdd(test);
 
@@ -30,4 +31,23 @@ Then('a live session appears under the login', async ({ window }) => {
   // The first connect opens the (being-replaced) Getting Started walkthrough over
   // the editor; close it so this chapter's screenshot shows the connected UI.
   await dismissWalkthrough(window);
+});
+
+When('I log out', async ({ window }) => {
+  await new LoginLauncher(window).disconnectButton.click();
+  // A fresh login always carries a little uncommitted transaction state, so logging
+  // out prompts to confirm — discard it.
+  const dialog = window.locator('.monaco-dialog-box');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await dialog.getByRole('button', { name: /Logout Anyway/i }).click();
+});
+
+Then('the stone appears under Recent', async ({ window }) => {
+  // After disconnecting, the just-used stone shows under a "Recent" heading with a
+  // reconnect action — history for one-click return.
+  const frame = jasperWebview(window);
+  await expect(frame.getByText('Recent', { exact: true })).toBeVisible({ timeout: 30_000 });
+  // The recent row is stamped with how long ago it was — unique to it (the same
+  // login also lingers under "Other logins").
+  await expect(frame.getByText(/just now|ago/).first()).toBeVisible();
 });
