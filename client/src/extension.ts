@@ -99,7 +99,7 @@ import { DEFAULT_MCP_HTTP_PORT, McpHttpServer } from './mcpHttpServer';
 import { ensureSelfSignedCert, trustCertCommand } from './tlsCert';
 import { ProcessTreeProvider, ProcessItem } from './processTreeProvider';
 import { OsConfigTreeProvider } from './sharedMemoryTreeProvider';
-import { runQuickSetup, magicStart, QuickSetupDeps } from './quickSetup';
+import { runQuickSetup, magicStart, setupWithOptions, QuickSetupDeps } from './quickSetup';
 import {
   isWindows,
   getWslInfo,
@@ -2918,6 +2918,9 @@ export function activate(context: vscode.ExtensionContext) {
     // One-click Get Started (the ⚡ button in the empty Sessions view): latest
     // GemStone → fresh database → connected → workspace open, zero prompts.
     vscode.commands.registerCommand('gemstone.magicStart', () => magicStart(quickSetupDeps())),
+    // "Set up with options" (the ⚙ card): pick version + extent, then create,
+    // connect, and open the UI.
+    vscode.commands.registerCommand('gemstone.setupWithOptions', () => setupWithOptions(quickSetupDeps())),
   );
 
   // ── SysAdmin Commands ───────────────────────────────────

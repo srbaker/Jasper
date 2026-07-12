@@ -145,8 +145,7 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
         await vscode.commands.executeCommand('gemstone.magicStart');
         return;
       case 'setupOptions':
-        // Placeholder until the dedicated version/DB-settings form lands.
-        await vscode.commands.executeCommand('gemstone.quickSetup');
+        await vscode.commands.executeCommand('gemstone.setupWithOptions');
         return;
       case 'connectExisting':
         // Placeholder until the dedicated "connect to an existing stone" form lands.

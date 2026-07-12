@@ -168,14 +168,14 @@ interface Provisioned {
  * save the DataCurator login. Shared by Quick Setup and the one-click Get Started.
  * Returns the saved login (and db), or null on any failure (already surfaced).
  */
-async function provisionDatabase(deps: QuickSetupDeps, version: GemStoneVersion): Promise<Provisioned | null> {
+async function provisionDatabase(deps: QuickSetupDeps, version: GemStoneVersion, extent: string = BASE_EXTENT): Promise<Provisioned | null> {
   if (!(await ensureInstalled(deps, version))) return null;
 
   let db;
   try {
     db = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'GemStone: Creating database…' },
-      (progress) => deps.databaseManager.createDatabaseDirect(version.version, BASE_EXTENT, STONE_NAME, LDI_NAME, progress),
+      (progress) => deps.databaseManager.createDatabaseDirect(version.version, extent, STONE_NAME, LDI_NAME, progress),
     );
     deps.refreshAdminViews();
   } catch (e) {
@@ -254,6 +254,48 @@ export async function magicStart(deps: QuickSetupDeps): Promise<void> {
   appendSysadmin('Get Started: provisioned; connecting');
   // Connect without the open-folder guard (there's nothing to open on first run),
   // then open a workspace so there's somewhere to type — the "show the UI" step.
+  await vscode.commands.executeCommand('gemstone.login', { login: provisioned.login, skipFolderCheck: true });
+  await vscode.commands.executeCommand('gemstone.openWorkspace');
+}
+
+/**
+ * "Set up with options" (the ⚙ card): like Get Started, but you pick the version
+ * and the base extent first — then it creates, connects, and opens the UI the same
+ * way. A stepped QuickPick, not a wall of settings.
+ */
+export async function setupWithOptions(deps: QuickSetupDeps): Promise<void> {
+  if (!(await ensureSharedMemory())) return;
+  const versions = await fetchVersions(deps);
+  if (!versions) return;
+
+  const latest = versions[0];
+  const versionPick = await vscode.window.showQuickPick(
+    versions.map((v) => ({
+      label: v.version,
+      description: v.extracted ? 'installed' : v.downloaded ? 'downloaded' : 'available to download',
+      version: v,
+    })),
+    { title: 'Set up GemStone (1/2)', placeHolder: `Choose a version (latest: ${latest.version})` },
+  );
+  if (!versionPick) return;
+
+  // Base extent: pick only when the version offers more than one (e.g. plain vs
+  // the pre-loaded Rowan extent); otherwise take the sole option.
+  const extents = deps.sysadminStorage.getAvailableExtents(versionPick.version.version);
+  let extent = extents[0] ?? BASE_EXTENT;
+  if (extents.length > 1) {
+    const extentPick = await vscode.window.showQuickPick(extents, {
+      title: 'Set up GemStone (2/2)',
+      placeHolder: 'Choose a base extent',
+    });
+    if (!extentPick) return;
+    extent = extentPick;
+  }
+
+  const provisioned = await provisionDatabase(deps, versionPick.version, extent);
+  if (!provisioned) return;
+
+  appendSysadmin('Set up with options: provisioned; connecting');
   await vscode.commands.executeCommand('gemstone.login', { login: provisioned.login, skipFolderCheck: true });
   await vscode.commands.executeCommand('gemstone.openWorkspace');
 }

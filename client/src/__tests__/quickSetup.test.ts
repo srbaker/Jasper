@@ -7,7 +7,7 @@ vi.mock('child_process');
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { exec } from 'child_process';
-import { runQuickSetup, magicStart, QuickSetupDeps } from '../quickSetup';
+import { runQuickSetup, magicStart, setupWithOptions, QuickSetupDeps } from '../quickSetup';
 import { GemStoneVersion } from '../sysadminTypes';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -497,5 +497,76 @@ describe('magicStart', () => {
     expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalledWith(
       '3.7.4', 'extent0', 'gs64stone', 'gs64ldi', expect.anything(),
     );
+  });
+});
+
+// ── Set up with options ────────────────────────────────────
+
+describe('setupWithOptions', () => {
+  let originalPlatform: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockSharedMemory(SHMMAX_1GB, SHMALL_1GB);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  });
+
+  it('creates the chosen version and connects', async () => {
+    const deps = makeDeps();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(
+      { label: '3.7.4', version: makeVersion({ extracted: true }) } as any,
+    );
+
+    await setupWithOptions(deps);
+
+    expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalledWith(
+      '3.7.4', 'extent0', 'gs64stone', 'gs64ldi', expect.anything(),
+    );
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'gemstone.login', expect.objectContaining({ skipFolderCheck: true }),
+    );
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('gemstone.openWorkspace');
+  });
+
+  it('lets you choose the base extent when there is more than one', async () => {
+    const deps = makeDeps();
+    deps.sysadminStorage.getAvailableExtents = vi.fn(() => ['extent0', 'extent0.rowan3']) as any;
+    vi.mocked(vscode.window.showQuickPick)
+      .mockResolvedValueOnce({ label: '3.7.4', version: makeVersion({ extracted: true }) } as any)
+      .mockResolvedValueOnce('extent0.rowan3' as any);
+
+    await setupWithOptions(deps);
+
+    expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalledWith(
+      '3.7.4', 'extent0.rowan3', 'gs64stone', 'gs64ldi', expect.anything(),
+    );
+  });
+
+  it('does not prompt for an extent when there is only one', async () => {
+    const deps = makeDeps();
+    deps.sysadminStorage.getAvailableExtents = vi.fn(() => ['extent0']) as any;
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(
+      { label: '3.7.4', version: makeVersion({ extracted: true }) } as any,
+    );
+
+    await setupWithOptions(deps);
+
+    expect(vscode.window.showQuickPick).toHaveBeenCalledTimes(1);
+    expect(deps.databaseManager.createDatabaseDirect).toHaveBeenCalled();
+  });
+
+  it('does nothing if the version pick is cancelled', async () => {
+    const deps = makeDeps();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(undefined as any);
+
+    await setupWithOptions(deps);
+
+    expect(deps.databaseManager.createDatabaseDirect).not.toHaveBeenCalled();
   });
 });
