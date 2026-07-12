@@ -23,6 +23,7 @@ When('I log in', async ({ window }) => {
 });
 
 Then('a live session appears under the login', async ({ window }) => {
-  // The launcher reports the connected session in its status line.
-  await expect(new LoginLauncher(window).status).toContainText(/Connected/i, { timeout: 60_000 });
+  // Connected for real: the disconnect (⏹) button appears only when a session is
+  // live. NOT a /Connected/i text match — "Not connected" contains "connected".
+  await expect(new LoginLauncher(window).disconnectButton).toBeVisible({ timeout: 60_000 });
 });

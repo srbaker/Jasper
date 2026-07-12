@@ -25,5 +25,8 @@ export async function logIn(window: Page): Promise<void> {
   const launcher = new LoginLauncher(window);
   await expect(launcher.login(/DataCurator/)).toBeVisible({ timeout: 30_000 });
   await launcher.connect();
-  await expect(launcher.status).toContainText(/Connected/i, { timeout: 60_000 });
+  // Wait for the REAL connected state: the disconnect (⏹) button exists only once
+  // connected. (Don't match the status text for /Connected/ — "Not connected"
+  // contains "connected", so that would pass on the disconnected state.)
+  await expect(launcher.disconnectButton).toBeVisible({ timeout: 60_000 });
 }
