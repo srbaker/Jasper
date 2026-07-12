@@ -10,21 +10,19 @@ import { VersionsView } from '../pageobjects/versions';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('the available GemStone releases are listed', async ({ window, screen }) => {
+Given('the available GemStone releases are listed', async ({ window }) => {
   await new VersionsView(window).open();
-  await screen('The available GemStone releases');
 });
 
-When('I download GemStone {string}', async ({ window, screen }, version: string) => {
+When('I download GemStone {string}', async ({ window }, version: string) => {
   const versions = new VersionsView(window);
   const started = await versions.startDownload(version);
   if (started) {
-    await screen(`Downloading GemStone ${version}`);
     await versions.waitForDownloadComplete();
   }
 });
 
-Then('GemStone {string} is downloaded', async ({ window, screen }, version: string) => {
+Then('GemStone {string} is downloaded', async ({ window }, version: string) => {
   const versions = new VersionsView(window);
   // The view refreshes asynchronously after the download (a network re-fetch),
   // so poll until the row reports the downloaded state rather than checking once.
@@ -34,5 +32,4 @@ Then('GemStone {string} is downloaded', async ({ window, screen }, version: stri
       message: `GemStone ${version} did not reach the downloaded state`,
     })
     .toBe(true);
-  await screen(`GemStone ${version}, downloaded`);
 });

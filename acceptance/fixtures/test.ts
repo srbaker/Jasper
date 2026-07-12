@@ -42,12 +42,6 @@ export type AcceptanceTestFixtures = {
   stone: TestStone | null;
   /** The workbench page for this scenario, ready to drive. */
   window: Page;
-  /**
-   * Capture a deliberately-named "screen" into the living-documentation manual,
-   * in addition to the automatic per-step screenshot. Use at meaningful UI
-   * milestones so the manual can reference stable, named screens.
-   */
-  screen: (name: string) => Promise<void>;
 };
 
 export const test = base.extend<AcceptanceTestFixtures>({
@@ -97,14 +91,6 @@ export const test = base.extend<AcceptanceTestFixtures>({
     });
     await use(vscode.window);
     await vscode.dispose();
-  },
-
-  screen: async ({ window }, use) => {
-    const capture = async (name: string) => {
-      const body = await window.screenshot();
-      await test.info().attach(`screen: ${name}`, { body, contentType: 'image/png' });
-    };
-    await use(capture);
   },
 });
 

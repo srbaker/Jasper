@@ -9,6 +9,6 @@ import { logIn } from './flows';
 
 const { Given } = createBdd(test);
 
-Given('I am logged in to the test stone', async ({ window, screen }) => {
-  await logIn(window, screen);
+Given('I am logged in to the test stone', async ({ window }) => {
+  await logIn(window);
 });

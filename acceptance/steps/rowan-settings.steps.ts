@@ -24,10 +24,9 @@ When('I open the project manifest as settings', async ({ window }) => {
   await runCommand(window, 'GemStone: View as Settings');
 });
 
-Then('the STON settings editor shows the project', async ({ window, screen }) => {
+Then('the STON settings editor shows the project', async ({ window }) => {
   // The settings editor is a webview: VS Code nests it in an outer .webview
   // iframe and an inner #active-frame.
   const frame = window.frameLocator('iframe.webview').frameLocator('#active-frame');
   await expect(frame.getByText(/HelloRowan/).first()).toBeVisible({ timeout: 30_000 });
-  await screen('The project’s Rowan settings');
 });

@@ -18,16 +18,15 @@ import { runCommand } from '../pageobjects/palette';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('I have opened Jasper without a folder', async ({ window, screen }) => {
+Given('I have opened Jasper without a folder', async ({ window }) => {
   await new Workbench(window).openGemStoneSidebar();
-  await screen('Jasper with no folder open');
 });
 
 When('I try to log in', async ({ window }) => {
   await runCommand(window, 'GemStone: Login');
 });
 
-Then('Jasper asks me to open a folder first', async ({ window, screen }) => {
+Then('Jasper asks me to open a folder first', async ({ window }) => {
   // The guard fires an error notification. Open the notification centre (the
   // status-bar bell) and read it from there, so the assertion doesn't race the
   // toast's auto-dismiss amid the language-server restart notifications.
@@ -35,5 +34,4 @@ Then('Jasper asks me to open a folder first', async ({ window, screen }) => {
   // Matches both the notification message and its ARIA-alert mirror — either
   // proves the guidance is shown.
   await expect(window.getByText(/open a folder in the workspace/i).first()).toBeVisible({ timeout: 15_000 });
-  await screen('The guidance to open a folder first');
 });

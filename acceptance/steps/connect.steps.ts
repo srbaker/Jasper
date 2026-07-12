@@ -13,18 +13,16 @@ import { LoginLauncher } from '../pageobjects/loginLauncher';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('a login is configured for the test stone', async ({ window, screen }) => {
+Given('a login is configured for the test stone', async ({ window }) => {
   await new Workbench(window).openGemStoneSidebar();
   await expect(new LoginLauncher(window).login(/DataCurator/)).toBeVisible({ timeout: 30_000 });
-  await screen('A configured login, ready to connect');
 });
 
 When('I log in', async ({ window }) => {
   await new LoginLauncher(window).connect();
 });
 
-Then('a live session appears under the login', async ({ window, screen }) => {
+Then('a live session appears under the login', async ({ window }) => {
   // The launcher reports the connected session in its status line.
   await expect(new LoginLauncher(window).status).toContainText(/Connected/i, { timeout: 60_000 });
-  await screen('A live GemStone session');
 });

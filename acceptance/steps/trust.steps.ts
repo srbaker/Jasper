@@ -16,16 +16,14 @@ Given('I open a project folder VS Code has not seen before', async ({ window }) 
   await expect(window.locator('.monaco-workbench')).toBeVisible();
 });
 
-Then('VS Code asks whether I trust the authors', async ({ window, screen }) => {
+Then('VS Code asks whether I trust the authors', async ({ window }) => {
   await expect(new WorkspaceTrust(window).dialog).toBeVisible();
-  await screen('The Workspace Trust dialog');
 });
 
 When('I trust the authors', async ({ window }) => {
   await new WorkspaceTrust(window).trust();
 });
 
-Then('the workspace is trusted', async ({ window, screen }) => {
+Then('the workspace is trusted', async ({ window }) => {
   await expect(new WorkspaceTrust(window).dialog).toBeHidden();
-  await screen('The workspace, now trusted');
 });

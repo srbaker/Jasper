@@ -14,9 +14,8 @@ import { RowanProjectView } from '../pageobjects/rowanProject';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('I have opened an empty folder', async ({ window, screen }) => {
+Given('I have opened an empty folder', async ({ window }) => {
   await new Workbench(window).openGemStoneSidebar();
-  await screen('An empty folder, not yet a Rowan project');
 });
 
 When('I create a Rowan project from the Rowan view', async ({ window }) => {
@@ -25,10 +24,9 @@ When('I create a Rowan project from the Rowan view', async ({ window }) => {
     .click();
 });
 
-Then('the folder becomes a Rowan project', async ({ window, screen }) => {
+Then('the folder becomes a Rowan project', async ({ window }) => {
   // Creation flips the gemstone.workspaceIsRowanProject context, which reveals
   // the disk-first Rowan view in the Explorer.
   await new Workbench(window).openExplorer();
   await expect(new RowanProjectView(window).header).toBeVisible({ timeout: 30_000 });
-  await screen('The new Rowan project, recognized by Jasper');
 });

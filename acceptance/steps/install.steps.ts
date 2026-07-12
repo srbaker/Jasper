@@ -10,24 +10,21 @@ import { ExtensionsView } from '../pageobjects/extensions';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('a bare VS Code with no extensions installed', async ({ window, screen }) => {
+Given('a bare VS Code with no extensions installed', async ({ window }) => {
   await expect(window.locator('.monaco-workbench')).toBeVisible();
   // Jasper is not installed yet — there is no GemStone activity in the bar.
   await expect(new Workbench(window).gemstoneActivityItem).toHaveCount(0);
-  await screen('A bare VS Code, before installing Jasper');
 });
 
-When('I search the Marketplace for {string}', async ({ window, screen }, query: string) => {
+When('I search the Marketplace for {string}', async ({ window }, query: string) => {
   const extensions = new ExtensionsView(window);
   await extensions.open();
   await extensions.search(query);
-  await screen('Searching the Marketplace');
 });
 
-When('I install the Jasper extension', async ({ window, screen }) => {
+When('I install the Jasper extension', async ({ window }) => {
   const extensions = new ExtensionsView(window);
   await extensions.openDetails('Jasper');
-  await screen('The Jasper extension on the Marketplace');
 
   await extensions.clickInstall();
 
@@ -44,7 +41,6 @@ When('I install the Jasper extension', async ({ window, screen }) => {
   }
 });
 
-Then('the GemStone activity appears in the sidebar', async ({ window, screen }) => {
+Then('the GemStone activity appears in the sidebar', async ({ window }) => {
   await expect(new Workbench(window).gemstoneActivityItem).toBeVisible({ timeout: 120_000 });
-  await screen('Jasper installed — the GemStone activity');
 });

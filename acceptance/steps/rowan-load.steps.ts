@@ -13,7 +13,7 @@ import { RowanView } from '../pageobjects/rowanView';
 
 const { When, Then } = createBdd(test);
 
-When('I load the {string} project into the image', async ({ window, screen }, project: string) => {
+When('I load the {string} project into the image', async ({ window }, project: string) => {
   const rowan = new RowanView(window);
   await rowan.open();
   await rowan.expand('Repositories');
@@ -21,14 +21,12 @@ When('I load the {string} project into the image', async ({ window, screen }, pr
   // The Rowan view re-queries the image only on refresh — refresh it so the newly
   // loaded project shows up.
   await rowan.refresh();
-  await screen('Loading the project into the image');
 });
 
-Then('the project appears under Loaded Projects', async ({ window, screen }) => {
+Then('the project appears under Loaded Projects', async ({ window }) => {
   const rowan = new RowanView(window);
   await rowan.expand('Loaded Projects');
   // Before loading there is one HelloRowan row (the repository); after loading a
   // second appears under Loaded Projects.
   await expect(rowan.row(/HelloRowan/)).toHaveCount(2, { timeout: 30_000 });
-  await screen('The project, loaded into the image');
 });

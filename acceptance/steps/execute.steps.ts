@@ -18,27 +18,24 @@ const { When, Then } = createBdd(test);
 const editor = (window: import('@playwright/test').Page) =>
   window.locator('.part.editor .monaco-editor').first();
 
-When('I open a workspace', async ({ window, screen }) => {
+When('I open a workspace', async ({ window }) => {
   await runCommand(window, 'GemStone: Open Workspace');
   await expect(editor(window)).toBeVisible({ timeout: 30_000 });
-  await screen('An empty workspace');
 });
 
-When('I enter the expression {string}', async ({ window, screen }, code: string) => {
+When('I enter the expression {string}', async ({ window }, code: string) => {
   await editor(window).click();
   await window.keyboard.type(code);
   await window.keyboard.press('ControlOrMeta+a'); // select it (Ctrl on Linux, Cmd on macOS)
   await expect(editor(window)).toContainText(code);
-  await screen('An expression, ready to evaluate');
 });
 
 When('I Display It', async ({ window }) => {
   await runCommand(window, 'GemStone: Display It');
 });
 
-Then('the result {string} is shown', async ({ window, screen }, value: string) => {
+Then('the result {string} is shown', async ({ window }, value: string) => {
   // Insert mode writes the result into the document once the on-stone evaluation
   // returns; poll the editor text until it lands.
   await expect(editor(window)).toContainText(value, { timeout: 30_000 });
-  await screen('The result, inserted after the expression');
 });

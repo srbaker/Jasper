@@ -15,10 +15,9 @@ When('I open the GemStone Manager', async ({ window }) => {
   await runCommand(window, 'GemStone Admin: GemStone Manager');
 });
 
-Then('it shows the Operating System, Versions, and Databases sections', async ({ window, screen }) => {
+Then('it shows the Operating System, Versions, and Databases sections', async ({ window }) => {
   const frame = window.frameLocator('iframe.webview').frameLocator('#active-frame');
   await expect(frame.getByText('Operating System')).toBeVisible({ timeout: 30_000 });
   await expect(frame.getByText('Versions', { exact: true })).toBeVisible();
   await expect(frame.getByText('Databases', { exact: true })).toBeVisible();
-  await screen('The GemStone Manager');
 });

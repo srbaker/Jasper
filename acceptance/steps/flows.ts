@@ -15,18 +15,15 @@ import { expect, type Page } from '@playwright/test';
 import { Workbench } from '../pageobjects/workbench';
 import { LoginLauncher } from '../pageobjects/loginLauncher';
 
-type Screen = (name: string) => Promise<void>;
-
 /**
  * Logged in to the provisioned @stone via the Login Launcher — the live-session
  * situation the "Connecting to a stone" chapter demonstrates, and the dependency
  * every stone-backed chapter builds on.
  */
-export async function logIn(window: Page, screen: Screen): Promise<void> {
+export async function logIn(window: Page): Promise<void> {
   await new Workbench(window).openGemStoneSidebar();
   const launcher = new LoginLauncher(window);
   await expect(launcher.login(/DataCurator/)).toBeVisible({ timeout: 30_000 });
   await launcher.connect();
   await expect(launcher.status).toContainText(/Connected/i, { timeout: 60_000 });
-  await screen('A live session');
 }
