@@ -12,6 +12,7 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test';
 import { runCommand } from '../pageobjects/palette';
+import { EnhancedInspectorInstall } from '../pageobjects/enhancedInspector';
 
 const { When, Then } = createBdd(test);
 
@@ -48,4 +49,27 @@ Then('the result {string} is shown', async ({ window }, value: string) => {
     .locator('.view-line span[class*="TextEditorDecorationType"]')
     .filter({ hasText: value });
   await expect(annotatedResult).toBeVisible({ timeout: 30_000 });
+});
+
+When('I Execute It', async ({ window }) => {
+  await runCommand(window, 'GemStone: Execute It');
+});
+
+Then('the Transcript shows {string}', async ({ window }, text: string) => {
+  // Execute It runs code for effect (no inline result). Transcript writes stream
+  // live to the GemStone Transcript output channel, which reveals itself — assert
+  // there (the bottom panel), not the editor where the code's string literal also
+  // lives.
+  await expect(window.locator('.part.panel').getByText(text)).toBeVisible({ timeout: 30_000 });
+});
+
+When('I Inspect It', async ({ window }) => {
+  await runCommand(window, 'GemStone: Inspect It');
+});
+
+Then('the inspector shows {string}', async ({ window }, value: string) => {
+  // No enhanced inspector on the plain stone, so Inspect It opens the classic
+  // inspector — a sidebar tree with the value as a root row.
+  await expect(new EnhancedInspectorInstall(window).classicInspectorRoot(value))
+    .toBeVisible({ timeout: 30_000 });
 });
