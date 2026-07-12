@@ -10,3 +10,9 @@ Feature: Working with a Rowan project
     Given I have opened the HelloRowan project
     Then the Rowan view lists the "HelloRowan-Core" package
     And expanding the package reveals the "Greeter" class and its methods
+
+  @rowan-project
+  Scenario: Opening a method for focused, disk-first editing
+    Given I have opened the HelloRowan project
+    When I open the "greet:" method from the Rowan view
+    Then its source opens on its own, ready to edit

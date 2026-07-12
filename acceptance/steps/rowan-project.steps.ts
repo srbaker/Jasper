@@ -10,7 +10,7 @@ import { test } from '../fixtures/test';
 import { Workbench } from '../pageobjects/workbench';
 import { RowanProjectView } from '../pageobjects/rowanProject';
 
-const { Given, Then } = createBdd(test);
+const { Given, When, Then } = createBdd(test);
 
 Given('I have opened the HelloRowan project', async ({ window, screen }) => {
   await new Workbench(window).openExplorer();
@@ -31,4 +31,20 @@ Then('expanding the package reveals the {string} class and its methods', async (
   await view.expand(new RegExp(cls));
   await expect(view.item(/greet:/)).toBeVisible({ timeout: 15_000 });
   await screen('Drilling into a class and its methods');
+});
+
+When('I open the {string} method from the Rowan view', async ({ window }, selector: string) => {
+  const view = new RowanProjectView(window);
+  await view.open();
+  await view.expand(/HelloRowan-Core/);
+  await view.expand(/Greeter/);
+  await view.item(selector).click(); // a method row's click opens its tonel-method:// doc
+});
+
+Then('its source opens on its own, ready to edit', async ({ window, screen }) => {
+  // The method opens as a focused slice of the .class.st in a normal editor.
+  const editor = window.locator('.part.editor .monaco-editor').first();
+  await expect(editor).toContainText('greet:', { timeout: 15_000 });
+  await expect(editor).toContainText('Hello, ');
+  await screen('A single method, open for disk-first editing');
 });
