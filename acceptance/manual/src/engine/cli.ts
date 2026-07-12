@@ -13,8 +13,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { generateManual } from './generate.js';
-import { OUTLINE } from '../outline.js';
+import { generateManual, parseOutlineMarkdown } from './generate.js';
 
 const packageRoot = path.resolve(import.meta.dirname, '..', '..');
 
@@ -39,13 +38,18 @@ const contentDir = path.join(packageRoot, 'src', 'content', 'docs', 'features');
 const dataDir = path.join(packageRoot, 'src', 'generated', 'features');
 const screensDir = path.join(packageRoot, 'public', 'screens');
 
+const outlinePath = path.join(packageRoot, 'src', 'outline.md');
+const outline = fs.existsSync(outlinePath)
+  ? parseOutlineMarkdown(fs.readFileSync(outlinePath, 'utf8'))
+  : undefined;
+
 const manual = generateManual({
   reportPath,
   contentDir,
   dataDir,
   screensDir,
   screensUrlBase: '/screens',
-  outline: OUTLINE,
+  outline,
   sidebarPath: path.join(packageRoot, 'src', 'generated', 'sidebar.json'),
 });
 

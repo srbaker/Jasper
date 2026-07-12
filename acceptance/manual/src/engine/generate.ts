@@ -226,6 +226,29 @@ export interface ManualSection {
   chapters: string[];
 }
 
+/**
+ * Parse a Markdown table of contents into sections. `##` headings are sections;
+ * `-`/`*` list items are chapters (by Feature name). Everything else — the title,
+ * HTML comments, prose — is ignored. Empty sections are dropped.
+ */
+export function parseOutlineMarkdown(markdown: string): ManualSection[] {
+  const withoutComments = markdown.replace(/<!--[\s\S]*?-->/g, '');
+  const sections: ManualSection[] = [];
+  let current: ManualSection | undefined;
+  for (const raw of withoutComments.split('\n')) {
+    const line = raw.trim();
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      current = { title: heading[1], chapters: [] };
+      sections.push(current);
+      continue;
+    }
+    const item = /^[-*]\s+(.+?)\s*$/.exec(line);
+    if (item && current) current.chapters.push(item[1]);
+  }
+  return sections.filter((s) => s.chapters.length > 0);
+}
+
 /** A Starlight sidebar entry: a link, or a labelled group of links. */
 type SidebarLink = { label: string; link: string };
 type SidebarGroup = { label: string; items: SidebarLink[] };
