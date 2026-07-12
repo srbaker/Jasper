@@ -54,33 +54,58 @@ function group(features: ManualFeature[], sections?: Section[]): OutlineGroup[] 
   return groups;
 }
 
-function renderStep(step: ManualStep): string {
+/** A step as one text line for the collapsed list; `shown` marks the step whose
+ *  screenshot is the one on display (the hero). */
+function stepLine(step: ManualStep, shown: boolean): string {
+  return (
+    `<li class="sl${shown ? ' sl-shown' : ''}" data-status="${step.status}">` +
+    `<span class="dot"></span><span class="kw">${esc(step.keyword)}</span><span class="txt">${esc(step.text)}</span>` +
+    `${shown ? '<span class="shown-tag">shown →</span>' : ''}` +
+    `</li>`
+  );
+}
+
+/** A step paired with its own screenshot(s) — the drill-down detail. */
+function renderStepDetail(step: ManualStep): string {
   const shots = step.screenshots.length
-    ? `<details class="shots"><summary>${step.screenshots.length} screenshot${step.screenshots.length === 1 ? '' : 's'}</summary>` +
-      `<div class="shotgrid">` +
-      step.screenshots.map((s) => `<a href="${esc(s.src)}"><img loading="lazy" src="${esc(s.src)}" alt="${esc(s.name)}"></a>`).join('') +
-      `</div></details>`
-    : '';
+    ? `<div class="shotgrid">` +
+      step.screenshots.map((s) => `<img class="shot" loading="lazy" src="${esc(s.src)}" alt="${esc(s.name)}">`).join('') +
+      `</div>`
+    : `<div class="noshot">—</div>`;
   const err = step.error ? `<pre class="err">${esc(step.error)}</pre>` : '';
   return (
-    `<li><details class="step" data-status="${step.status}">` +
-    `<summary><span class="dot"></span><span class="kw">${esc(step.keyword)}</span> ${esc(step.text)}</summary>` +
-    `<div class="step-body">${err}${shots}</div>` +
-    `</details></li>`
+    `<li class="xstep" data-status="${step.status}">` +
+    `<div class="xstep-line"><span class="dot"></span><span class="kw">${esc(step.keyword)}</span><span class="txt">${esc(step.text)}</span></div>` +
+    `<div class="xstep-shots">${err}${shots}</div>` +
+    `</li>`
   );
 }
 
 function renderScenario(sc: ManualScenario, annotate?: (t: string[]) => string[]): string {
   const notes = annotate?.(sc.tags) ?? [];
-  const anno = notes.length
-    ? `<p class="anno"><span class="anno-label">Runs against</span>${notes.map((n) => `<span class="chip">${esc(n)}</span>`).join('')}</p>`
-    : '';
+  const chips = notes.map((n) => `<span class="chip">${esc(n)}</span>`).join('');
+  // The "hero" is the final captured state — the last screenshot of the last step
+  // that has one (in practice the Then's result). Track which step it came from so
+  // the collapsed view can label it and highlight that step.
+  let heroStep: ManualStep | null = null;
+  for (const s of sc.steps) if (s.screenshots.length) heroStep = s;
+  const hero = heroStep ? heroStep.screenshots[heroStep.screenshots.length - 1] : null;
+  const heroHtml = hero
+    ? `<figure class="sc-hero">` +
+      `<img class="shot" loading="lazy" src="${esc(hero.src)}" alt="${esc(hero.name)}">` +
+      `<figcaption class="hero-cap"><span class="kw">${esc(heroStep!.keyword)}</span> ${esc(heroStep!.text)}</figcaption>` +
+      `</figure>`
+    : `<div class="sc-hero sc-hero-empty">No screenshot</div>`;
   const desc = sc.description ? `<p class="desc">${esc(sc.description)}</p>` : '';
   return (
-    `<section class="scenario" data-status="${sc.status}">` +
-    `<h4><span class="dot"></span>${esc(sc.name)}</h4>${anno}${desc}` +
-    `<ol class="steps">${sc.steps.map(renderStep).join('')}</ol>` +
-    `</section>`
+    `<details class="scenario" data-status="${sc.status}">` +
+    `<summary>` +
+    `<div class="sc-head"><span class="dot"></span><span class="sc-name">${esc(sc.name)}</span>` +
+    `${chips ? `<span class="sc-chips">${chips}</span>` : ''}<span class="chev"></span></div>` +
+    `<div class="sc-collapsed"><ol class="sc-steps">${sc.steps.map((s) => stepLine(s, s === heroStep)).join('')}</ol>${heroHtml}</div>` +
+    `</summary>` +
+    `<div class="sc-expanded">${desc}<ol class="xsteps">${sc.steps.map(renderStepDetail).join('')}</ol></div>` +
+    `</details>`
   );
 }
 
@@ -126,12 +151,12 @@ export function renderHtml(manual: Manual, opts: RenderOptions): string {
   <div class="controls">
     <button data-act="expand">Expand all</button>
     <button data-act="collapse">Collapse all</button>
-    <button data-act="shots">Show all screenshots</button>
   </div>
   ${opts.generatedAt ? `<p class="stamp">Generated ${esc(opts.generatedAt)}</p>` : ''}
 </header>
 <nav class="toc"><h2>Contents</h2><ul>${toc}</ul></nav>
 <main>${body}</main>
+<div id="lightbox" class="lb" hidden><img alt=""></div>
 <script>${JS}</script>
 </body>
 </html>
@@ -161,35 +186,66 @@ main{grid-area:main;padding:1.5rem 2rem;max-width:60rem}
 h2.section{font-size:1.5rem;border-bottom:2px solid var(--line);padding-bottom:.25rem;margin:2rem 0 1rem}
 .feature{margin:0 0 2rem}
 .feature>h3{font-size:1.2rem;margin:1.25rem 0 .25rem}
-.scenario{margin:.75rem 0 1rem;padding-left:.25rem}
-.scenario>h4{font-size:1rem;margin:.75rem 0 .35rem;font-weight:600}
 .desc{color:var(--muted);margin:.25rem 0}
-.anno{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.25rem 0}
-.anno-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .chip{font-size:.78rem;padding:.05rem .55rem;border:1px solid var(--line);border-radius:999px;background:#f6f6f6}
-.steps{list-style:none;margin:.25rem 0;padding:0}
-.step{border-left:2px solid var(--line);margin:.1rem 0}
-.step>summary{cursor:pointer;padding:.15rem .5rem;list-style:none;display:flex;align-items:baseline;gap:.4rem}
-.step>summary::-webkit-details-marker{display:none}
-.step>summary:hover{background:#fafafa}
-.kw{color:var(--muted);font-weight:600;font-size:.85rem;min-width:3.2rem;display:inline-block}
-.dot{width:.6rem;height:.6rem;border-radius:50%;flex:none;background:var(--skip);transform:translateY(.05rem)}
-[data-status=passed]>summary>.dot,[data-status=passed]>h3>.dot,[data-status=passed]>h4>.dot{background:var(--pass)}
-[data-status=failed]>summary>.dot,[data-status=failed]>h3>.dot,[data-status=failed]>h4>.dot{background:var(--fail)}
-.step-body{padding:.35rem .5rem .5rem 1.5rem}
-.shots>summary{cursor:pointer;color:var(--muted);font-size:.85rem}
-.shotgrid{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}
-.shotgrid img{max-width:22rem;width:100%;border:1px solid var(--line);border-radius:6px}
-.err{background:#fff4f4;border:1px solid #f3c2c2;color:var(--fail);padding:.5rem;border-radius:6px;white-space:pre-wrap;font-size:.8rem;overflow:auto}
-@media (max-width:800px){body{grid-template-columns:1fr;grid-template-areas:"head" "nav" "main"}nav.toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}}
-@media print{nav.toc,.controls{display:none}body{display:block}.step,.shots{--x:0}details{}}
+.kw{color:var(--muted);font-weight:600;font-size:.82rem;min-width:3rem;display:inline-block}
+.dot{width:.55rem;height:.55rem;border-radius:50%;flex:none;background:var(--skip);transform:translateY(.05rem)}
+[data-status=passed]>.dot,[data-status=passed]>h3>.dot,[data-status=passed]>summary .sc-head>.dot,.xstep[data-status=passed] .dot{background:var(--pass)}
+[data-status=failed]>.dot,[data-status=failed]>h3>.dot,[data-status=failed]>summary .sc-head>.dot,.xstep[data-status=failed] .dot{background:var(--fail)}
+/* Scenario card: collapsed = steps ‖ final Then shot; open = per-step drill-down */
+.scenario{border:1px solid var(--line);border-radius:8px;margin:.6rem 0;overflow:hidden}
+.scenario>summary{cursor:pointer;list-style:none;padding:.6rem .8rem}
+.scenario>summary::-webkit-details-marker{display:none}
+.scenario>summary:hover{background:#fafafa}
+.sc-head{display:flex;align-items:center;gap:.5rem}
+.sc-name{font-weight:600}
+.sc-chips{display:flex;gap:.3rem;flex-wrap:wrap}
+.chev{margin-left:auto;width:0;height:0;border-left:6px solid var(--muted);border-top:5px solid transparent;border-bottom:5px solid transparent;transition:transform .15s}
+.scenario[open]>summary .chev{transform:rotate(90deg)}
+.sc-collapsed{display:grid;grid-template-columns:minmax(14rem,1fr) minmax(0,1.4fr);gap:1.2rem;margin-top:.6rem;align-items:start}
+.scenario[open]>summary .sc-collapsed{display:none}
+.sc-steps{list-style:none;margin:0;padding:0;font-size:.92rem}
+.sc-steps .sl{display:flex;align-items:baseline;gap:.4rem;padding:.12rem 0}
+.sl-shown{font-weight:600}
+.sl-shown .kw{color:var(--fg)}
+.shown-tag{margin-left:auto;font-size:.72rem;font-weight:600;color:var(--pass);white-space:nowrap}
+.sc-hero{margin:0}
+.sc-hero img{width:100%;border:1px solid var(--line);border-top-left-radius:6px;border-top-right-radius:6px;display:block}
+.hero-cap{font-size:.8rem;color:var(--muted);padding:.35rem .5rem;border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;background:#fafafa}
+.hero-cap .kw{color:var(--pass);min-width:auto;margin-right:.15rem}
+.sc-hero-empty{color:var(--muted);font-size:.85rem;display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:6px;min-height:6rem}
+.shot{cursor:zoom-in}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;padding:2rem;z-index:20;cursor:zoom-out}
+.lb[hidden]{display:none}
+.lb img{max-width:100%;max-height:100%;border-radius:4px;box-shadow:0 8px 48px rgba(0,0,0,.5)}
+.sc-expanded{padding:.5rem .8rem .8rem;border-top:1px solid var(--line)}
+.xsteps{list-style:none;margin:0;padding:0}
+.xstep{display:grid;grid-template-columns:minmax(12rem,1fr) minmax(0,1.4fr);gap:1.2rem;padding:.55rem 0;border-bottom:1px solid var(--line);align-items:start}
+.xstep:last-child{border-bottom:0}
+.xstep-line{display:flex;align-items:baseline;gap:.4rem;font-size:.92rem}
+.shotgrid{display:flex;flex-wrap:wrap;gap:.5rem}
+.shotgrid img{width:100%;border:1px solid var(--line);border-radius:6px;display:block}
+.noshot{color:var(--muted)}
+.err{background:#fff4f4;border:1px solid #f3c2c2;color:var(--fail);padding:.5rem;border-radius:6px;white-space:pre-wrap;font-size:.8rem;overflow:auto;margin-bottom:.5rem}
+@media (max-width:800px){body{grid-template-columns:1fr;grid-template-areas:"head" "nav" "main"}nav.toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}.sc-collapsed,.xstep{grid-template-columns:1fr;gap:.6rem}}
+@media print{nav.toc,.controls{display:none}body{display:block}}
 `;
 
 const JS = `
 document.querySelector('.controls').addEventListener('click',function(e){
   var act=e.target.getAttribute('data-act'); if(!act) return;
-  if(act==='expand') document.querySelectorAll('main details').forEach(function(d){d.open=true});
-  if(act==='collapse') document.querySelectorAll('main details').forEach(function(d){d.open=false});
-  if(act==='shots') document.querySelectorAll('main details.shots').forEach(function(d){d.open=true;var s=d.closest('.step');if(s)s.open=true});
+  var open=act==='expand';
+  document.querySelectorAll('main details.scenario').forEach(function(d){d.open=open});
 });
+// Clicking a screenshot zooms it in a lightbox — and must NOT toggle the card
+// (the hero lives inside the scenario's <summary>), so cancel the default toggle.
+var lb=document.getElementById('lightbox'), lbImg=lb.querySelector('img');
+document.querySelector('main').addEventListener('click',function(e){
+  var img=e.target.closest('img.shot'); if(!img) return;
+  e.preventDefault(); e.stopPropagation();
+  lbImg.src=img.currentSrc||img.src; lb.hidden=false;
+});
+function closeLb(){lb.hidden=true;lbImg.removeAttribute('src');}
+lb.addEventListener('click',closeLb);
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!lb.hidden)closeLb();});
 `;
