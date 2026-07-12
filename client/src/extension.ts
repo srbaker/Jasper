@@ -56,12 +56,13 @@ import { refreshEnhancedInspectorAvailable } from './enhancedInspectorAvailabili
 import { supportsEnhancedInspector } from './enhancedInspectorInstall';
 import { DebuggerPanel } from './debuggerPanel';
 import { InlineValuesCodeLensProvider } from './inlineValuesCodeLens';
-import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession } from './gemstoneFileSystemProvider';
+import { GemStoneFileSystemProvider, MethodCompiledEvent, ClassDefinitionCompiledEvent, closeGemstoneTabsForSession, installStaleGemstoneTabReaper } from './gemstoneFileSystemProvider';
 import { TonelMethodFileSystemProvider } from './tonelMethodFs';
 import { openWorkspace } from './workspace';
 import { openTutorialNotebook } from './tutorialNotebook';
 import { GemStoneDebugSession } from './gemstoneDebugSession';
 import { InspectorTreeProvider, InspectorNode } from './inspectorTreeProvider';
+import { registerStageBrowser } from './stageBrowser';
 import { GemStoneWorkspaceSymbolProvider } from './gemstoneSymbolProvider';
 import { GemStoneDefinitionProvider } from './gemstoneDefinitionProvider';
 import { GemStoneHoverProvider } from './gemstoneHoverProvider';
@@ -84,6 +85,8 @@ import { VersionTreeProvider, VersionItem } from './versionTreeProvider';
 import { DatabaseManager } from './databaseManager';
 import { DatabaseTreeProvider, DatabaseNode } from './databaseTreeProvider';
 import { ProcessManager } from './processManager';
+import { GemstoneManagerPanel } from './gemstoneManager';
+import { GemstoneLoginLauncherProvider } from './gemstoneLoginLauncher';
 import { openMcpInspector } from './openMcpInspector';
 import { McpSocketServer, writeClaudeDesktopMcpConfig } from './mcpSocketServer';
 import { writeClaudeCodeUserMcpConfig } from './claudeCodeUserMcpConfig';
@@ -436,6 +439,7 @@ export function activate(context: vscode.ExtensionContext) {
   // and broken — no session to resolve gemstone://). See DebuggerPanel.
   DebuggerPanel.initSourceTabCleanup(context.workspaceState);
 
+
   // Inline-value overlay (#5): a source-pane CodeLens toggles it. The lens is
   // emitted only for source docs a live debugger is showing; the command it fires
   // carries that doc's URI so the right panel toggles.
@@ -518,18 +522,57 @@ export function activate(context: vscode.ExtensionContext) {
   // SessionManager is created early so the Logins panel can mark the connected
   // login row (and swap its inline Login action for Logout) in single-session mode.
   sessionManager = new SessionManager();
-  const treeProvider = new LoginTreeProvider(storage, sessionManager);
 
-  const treeView = vscode.window.createTreeView('gemstoneLogins', {
-    treeDataProvider: treeProvider,
-    showCollapseAll: false,
+  // Sessions don't survive a window reload, so any gemstone:// method/class tab
+  // VS Code restored from the previous window is unservable and shows a broken
+  // "could not be opened" editor. Reap such stale tabs — both those already
+  // present and (winning the async-restore race) those that appear afterward.
+  // Must run after sessionManager exists (the reaper checks for a live session).
+  context.subscriptions.push(installStaleGemstoneTabReaper(sessionManager));
+
+  const treeProvider = new LoginTreeProvider(storage, sessionManager);
+  // The "Logins & Sessions" sidebar tree was removed; login/session management
+  // now lives in the GemStone Manager and the Login Launcher below. treeProvider
+  // is retained because the login editor and many commands still drive it (its
+  // refresh() is a no-op without a view).
+
+  // Login Launcher — the Run-and-Debug-style login selector pinned to the top of
+  // the GemStone sidebar (the first sidebar webview view).
+  const loginLauncherProvider = new GemstoneLoginLauncherProvider({
+    storage,
+    sessionManager,
+    globalState: context.globalState,
   });
-  context.subscriptions.push(treeView);
+  // Drive the `gemstone.connected` context key from whether any session is
+  // live. Session-scoped explorers (Inspector, and the forthcoming stone class
+  // hierarchy) are shown via `when: gemstone.connected`, so the sidebar fills in
+  // once you log in and empties back to just the launcher when you log out.
+  const applyConnectedContext = () =>
+    vscode.commands.executeCommand(
+      'setContext',
+      'gemstone.connected',
+      sessionManager.getSessions().length > 0,
+    );
+  applyConnectedContext();
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      GemstoneLoginLauncherProvider.viewType,
+      loginLauncherProvider,
+      { webviewOptions: { retainContextWhenHidden: true } },
+    ),
+    // Reflect login/logout and session-selection changes immediately.
+    sessionManager.onDidChangeSelection(() => {
+      loginLauncherProvider.refresh();
+      applyConnectedContext();
+    }),
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('gemstone.logins')) {
         treeProvider.refresh();
+        loginLauncherProvider.refresh();
       }
       if (e.affectsConfiguration('gemstone.maxEnvironment')) {
         // maxEnvironment changes are picked up on next browser refresh
@@ -577,6 +620,9 @@ export function activate(context: vscode.ExtensionContext) {
   });
   inspectorProvider.setView(inspectorView);
   context.subscriptions.push(inspectorView, inspectorProvider);
+
+  // ── Stage Browser (cascading navigation panes) ───────────
+  const stageBrowser = registerStageBrowser(context, sessionManager);
 
   // ── GemStone FileSystem Provider ─────────────────────────
   const gemstoneFs = new GemStoneFileSystemProvider(sessionManager, exportManager);
@@ -667,6 +713,12 @@ export function activate(context: vscode.ExtensionContext) {
               const sessionId = parseInt(uri.authority, 10);
               const className = parts[2];
               SystemBrowser.methodCompiled(sessionId, className);
+              // Keep the Stage Browser's method list in sync too (new-class URIs
+              // carry no real class name, so skip those — the class-definition
+              // event below handles class creation).
+              if (className !== 'new-class') {
+                stageBrowser.onMethodCompiled(sessionId, className);
+              }
             }
           }
         }
@@ -677,6 +729,15 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     gemstoneFs.onMethodCompiled(handleMethodCompiled),
     gemstoneFs.onClassDefinitionCompiled(handleClassDefinitionCompiled),
+    // Refresh the Stage Browser's class list when a class is created/redefined
+    // (the definition event carries the real class name; the new-class URI
+    // doesn't). parts: ['', dictName, className, 'definition'].
+    gemstoneFs.onClassDefinitionCompiled((e) => {
+      const parts = e.uri.path.split('/').map(decodeURIComponent);
+      if (parts.length >= 3) {
+        stageBrowser.onClassCompiled(parseInt(e.uri.authority, 10), parts[2]);
+      }
+    }),
   );
 
   context.subscriptions.push(
@@ -1585,7 +1646,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
       const side = args.isMeta ? ' class' : '';
       const title = args.direction === 'up'
-        ? `${args.className}${side} >> #${args.selector} — superclass implementations`
+        ? `${args.className}${side} >> #${args.selector} — superclass implementors`
         : `${args.className}${side} >> #${args.selector} — subclass overrides`;
       await showMethodResults(session, results, title);
     }),
@@ -2239,38 +2300,22 @@ export function activate(context: vscode.ExtensionContext) {
   // OS Configuration (macOS, Linux, and Windows)
   if (process.platform === 'darwin' || process.platform === 'linux' || isWindows()) {
     const osConfigProvider = new OsConfigTreeProvider();
-    context.subscriptions.push(
-      vscode.window.createTreeView('gemstoneSharedMemory', {
-        treeDataProvider: osConfigProvider,
-      })
-    );
+    // OS Config, Versions, Databases, and Processes trees were removed from the
+    // sidebar in favor of the GemStone Manager panel. The providers below are
+    // kept because commands (and the Manager) still drive them; their refresh()
+    // calls are harmless no-ops without an attached view. osConfigProvider is
+    // retained for its remediation commands.
     osConfigProvider.registerCommands(context);
   }
 
   // Versions
   const versionProvider = new VersionTreeProvider(versionManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneVersions', {
-      treeDataProvider: versionProvider,
-    })
-  );
 
   // Databases
   const databaseProvider = new DatabaseTreeProvider(sysadminStorage, processManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneDatabases', {
-      treeDataProvider: databaseProvider,
-      showCollapseAll: true,
-    })
-  );
 
   // Processes
   const processProvider = new ProcessTreeProvider(processManager);
-  context.subscriptions.push(
-    vscode.window.createTreeView('gemstoneProcesses', {
-      treeDataProvider: processProvider,
-    })
-  );
 
   // Rowan: tracked repositories (registry persists in globalState — stones are
   // disposable, the registry isn't) + package-manager operations.
@@ -3040,6 +3085,16 @@ export function activate(context: vscode.ExtensionContext) {
         refreshAdminViews();
         vscode.window.showInformationMessage(`Database "${db.dirName}" created.`);
       }
+    }),
+
+    vscode.commands.registerCommand('gemstone.openManager', () => {
+      GemstoneManagerPanel.show({
+        storage: sysadminStorage,
+        versionManager,
+        processManager,
+        databaseManager,
+        getLogins: () => storage.getLogins(),
+      });
     }),
 
     vscode.commands.registerCommand('gemstone.deleteDatabase', async (node: DatabaseNode) => {
