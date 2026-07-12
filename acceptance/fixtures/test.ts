@@ -78,12 +78,19 @@ export const test = base.extend<AcceptanceTestFixtures>({
       test.skip(
         true,
         `GemStone ${STONE_VERSION} is not installed for acceptance — provision it first ` +
-          `(bash acceptance/scripts/provision-stone.sh ${STONE_VERSION} bare)`,
+          `(bash acceptance/scripts/provision-stone.sh ${STONE_VERSION} rowan)`,
       );
       await use(null);
       return;
     }
-    const spec: StoneSpec = $tags.includes('@stone:rowan') ? 'rowan' : 'bare';
+    // The DEFAULT stone is a rowan3-extent stone with default configs, reset
+    // (re-copied from the shipped extent) fresh for every scenario. rowan3 is a
+    // superset of bare — it has the kernel classes the browser tests need AND
+    // Rowan — so it serves every stone chapter; opt into a bare extent only with
+    // @stone:bare. The seeded login connects as DataCurator (a normal user): we
+    // avoid SystemUser except where a test genuinely needs it, and such a test
+    // must say so (tag @systemuser) since it runs with elevated privilege.
+    const spec: StoneSpec = $tags.includes('@stone:bare') ? 'bare' : 'rowan';
     const stone = provisionStone(STONE_VERSION, spec);
     await use(stone);
     stopStone(STONE_VERSION);
