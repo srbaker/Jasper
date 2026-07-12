@@ -51,3 +51,44 @@ Then('the stone appears under Recent', async ({ window }) => {
   // login also lingers under "Other logins").
   await expect(frame.getByText(/just now|ago/).first()).toBeVisible();
 });
+
+When('I add a login from the Sessions view', async ({ window }) => {
+  await jasperWebview(window).getByText('Add login', { exact: true }).click();
+});
+
+Then('a form for a new login appears', async ({ window }) => {
+  // The login editor opens in add mode (its own webview panel). Target it by content
+  // — the add-mode subtitle is unique to it — searching every frame.
+  await expect
+    .poll(
+      async () => {
+        for (const frame of window.frames()) {
+          if (await frame.getByText(/Connection parameters for this login/).count().catch(() => 0)) return true;
+        }
+        return false;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+});
+
+When('I commit the session', async ({ window }) => {
+  await jasperWebview(window).locator('.iconbtn[data-act="commit"]').click();
+});
+
+Then('the commit succeeds', async ({ window }) => {
+  await expect(window.getByText(/Commit succeeded/).first()).toBeVisible({ timeout: 30_000 });
+});
+
+When('I abort the session', async ({ window }) => {
+  await jasperWebview(window).locator('.iconbtn[data-act="abort"]').click();
+  // A fresh session carries uncommitted transaction state, so aborting confirms —
+  // discard it.
+  const dialog = window.locator('.monaco-dialog-box');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await dialog.getByRole('button', { name: /Abort Anyway/i }).click();
+});
+
+Then('the abort succeeds', async ({ window }) => {
+  await expect(window.getByText(/Abort succeeded/).first()).toBeVisible({ timeout: 30_000 });
+});

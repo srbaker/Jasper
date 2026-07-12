@@ -16,6 +16,8 @@
     bolt: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.3 1L3 9h4l-1 6 6.5-8.5H8L9.3 1z"/></svg>',
     plug: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 1v4H4v2a4 4 0 0 0 3 3.9V15h2v-4.1A4 4 0 0 0 12 7V5h-1V1H9v4H7V1H5z"/></svg>',
     recent: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a6 6 0 1 0 5.7 4.1l-1 .3A5 5 0 1 1 8 3v2l3-2.5L8 0v2zM7.5 4.5v4l3.3 2 .5-.9L8.5 8V4.5h-1z"/></svg>',
+    commit: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.4 11.6L2.8 8l1.1-1.1 2.5 2.5 5.7-5.7L13.2 4.8z"/></svg>',
+    abort: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 3V1L4.5 4 8 7V5a4 4 0 1 1-4 4H2.5A5.5 5.5 0 1 0 8 3z"/></svg>',
   };
 
   function esc(s) {
@@ -32,6 +34,8 @@
     return `<div class="row active">
       <span class="rdot on"></span>
       <span class="rlabel"><span class="who">${esc(s.who)}</span> <span class="where">${esc(s.where)} (${esc(s.host)})</span></span>
+      <button class="iconbtn" data-act="commit" data-id="${esc(s.id)}" title="Commit">${ICONS.commit}</button>
+      <button class="iconbtn" data-act="abort" data-id="${esc(s.id)}" title="Abort">${ICONS.abort}</button>
       <button class="iconbtn stop" data-act="disconnect" data-id="${esc(s.id)}" title="Log out">${ICONS.stop}</button>
     </div>`;
   }
@@ -134,6 +138,8 @@
     const id = el.dataset.id;
     if (act === 'connect' && id) return void post({ command: 'connect', id });
     if (act === 'disconnect' && id) return void post({ command: 'disconnect', id });
+    if (act === 'commit' && id) return void post({ command: 'commit', id });
+    if (act === 'abort' && id) return void post({ command: 'abort', id });
     if (act === 'reconnect') return void post({ command: 'reconnect', key: el.dataset.key });
     if (act === 'addLogin') return void post({ command: 'addLogin' });
     if (act === 'addLoginToDb') return void post({ command: 'addLoginToDb', stone: el.dataset.stone });

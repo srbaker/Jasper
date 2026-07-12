@@ -90,6 +90,8 @@ type Inbound =
   | { command: 'ready' }
   | { command: 'connect'; id: string }
   | { command: 'disconnect'; id: string }
+  | { command: 'commit'; id: string }
+  | { command: 'abort'; id: string }
   | { command: 'reconnect'; key: string }
   | { command: 'addLogin' }
   | { command: 'addLoginToDb'; stone: string }
@@ -140,6 +142,20 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
         const session = this.sessionForId(msg.id);
         if (!session) return;
         await vscode.commands.executeCommand('gemstone.sessionLogout', { activeSession: session });
+        this.post();
+        return;
+      }
+      case 'commit': {
+        const session = this.sessionForId(msg.id);
+        if (!session) return;
+        await vscode.commands.executeCommand('gemstone.sessionCommit', { activeSession: session });
+        this.post();
+        return;
+      }
+      case 'abort': {
+        const session = this.sessionForId(msg.id);
+        if (!session) return;
+        await vscode.commands.executeCommand('gemstone.sessionAbort', { activeSession: session });
         this.post();
         return;
       }
