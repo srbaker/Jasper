@@ -25,8 +25,16 @@ export class StageBrowser {
     if ((await h.getAttribute('aria-expanded')) === 'false') await h.click();
   }
 
-  /** A tree row in a pane, matched by visible text. */
+  /**
+   * A tree row in a pane, matched EXACTLY by name. Stage Browser rows expose an
+   * accessible name of "<Name>, has actions" (or just "<Name>"), so a plain
+   * substring would also match ByteArray, ArrayedCollection, … for "Array". Anchor
+   * on the start + a name boundary so "Array" hits only the Array class.
+   */
   row(paneTitle: string, name: string | RegExp): Locator {
-    return this.pane(paneTitle).getByRole('treeitem').filter({ hasText: name });
+    const exact = typeof name === 'string'
+      ? new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(,|$)`)
+      : name;
+    return this.pane(paneTitle).getByRole('treeitem', { name: exact });
   }
 }

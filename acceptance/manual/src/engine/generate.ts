@@ -152,15 +152,8 @@ export function buildManual(report: CucumberReport, opts: BuildOptions): BuildRe
   const assets: AssetBody[] = [];
   const featureSlugs = new Set<string>();
 
-  // Dedupe features that appear in more than one feed file (last occurrence wins),
-  // so an accidentally-accumulated cucumber-report doesn't double up chapters. A
-  // clean single run (the canonical path) leaves this a no-op.
-  const deduped = new Map<string, (typeof report)[number]>();
-  for (const f of report.filter((f) => f.elements.some((e) => e.type !== 'background'))) {
-    deduped.set(f.name || path.basename(f.uri), f);
-  }
-
-  const features: ManualFeature[] = [...deduped.values()]
+  const features: ManualFeature[] = report
+    .filter((f) => f.elements.some((e) => e.type !== 'background'))
     .map((raw) => {
       const slug = uniqueSlug(slugify(raw.name || path.basename(raw.uri)), featureSlugs);
       const scenarioSlugs = new Set<string>();

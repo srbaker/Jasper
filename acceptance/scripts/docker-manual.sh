@@ -38,5 +38,5 @@ for group in "$@"; do
   esac
 done
 
-echo "==> generating manual (site + PDF) on host"
+echo "==> generating the HTML manual on host"
 npm --prefix manual run manual

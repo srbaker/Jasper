@@ -65,9 +65,10 @@ if (!fs.existsSync(reportPath)) {
 
 const { manual, assets } = buildManual(readReport(reportPath), { screensUrlBase: 'screens' });
 
+// Wipe the whole output per run — no stale page or screenshots linger.
 const outDir = path.join(packageRoot, 'dist');
+fs.rmSync(outDir, { recursive: true, force: true });
 const screensDir = path.join(outDir, 'screens');
-fs.rmSync(screensDir, { recursive: true, force: true });
 for (const asset of assets) {
   const target = path.join(screensDir, asset.relPath);
   fs.mkdirSync(path.dirname(target), { recursive: true });
