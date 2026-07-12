@@ -43,6 +43,32 @@ export function loginAsSystemUser(base: ActiveSession, password: string): Active
   };
 }
 
+// Open a transient session for the SAME user as `base`, reusing all of its login
+// coordinates and credentials. Used to perform an isolated commit (a Rowan load)
+// without committing the working session's in-flight changes — while still landing
+// the result in THIS user's symbol dictionaries, so the working (browsing) session
+// sees it (unlike a SystemUser loader, whose dictionaries it can't see). Not
+// registered with the SessionManager; the caller must log it out. Returns
+// undefined when the session's password isn't retained (can't re-authenticate).
+export function loginAsWorkingUser(base: ActiveSession): ActiveSession | undefined {
+  const { login } = base;
+  if (!login.gs_password) return undefined;
+  const stoneNrs = `!tcp@${login.gem_host}#server!${login.stone}`;
+  const gemNrs = `!tcp@${login.gem_host}#netldi:${login.netldi}#task!gemnetobject`;
+  const result = base.gci.GciTsLogin(
+    stoneNrs, login.host_user || null, login.host_password || null, false,
+    gemNrs, login.gs_user, login.gs_password, 0, 0,
+  );
+  if (!result.session) return undefined;
+  return {
+    id: -1,
+    gci: base.gci,
+    handle: result.session,
+    login,
+    stoneVersion: base.stoneVersion,
+  };
+}
+
 // Obtain a SystemUser session, trying the stock default password first and
 // prompting for it otherwise. `purpose` completes the prompt "…required to
 // <purpose>". Returns undefined if the user cancels or login fails.

@@ -743,6 +743,12 @@
         "icon": "$(list-tree)"
       },
       {
+        "command": "gemstone.openWebPreview",
+        "title": "Open Web Preview…",
+        "category": "GemStone",
+        "icon": "$(globe)"
+      },
+      {
         "command": "gemstone.rowanAddRepo",
         "title": "Add Rowan Repository…",
         "category": "GemStone",

@@ -14,10 +14,10 @@ export interface RowanCommitResult {
 // This is the counterpart to exportRowanProject: that writes a standalone COPY
 // to a chosen folder via `writeResolvedProject:` (no image side effects, dirty
 // flag untouched), whereas this uses `writeProjectNamed:` — the in-place variant
-// that updates the dirty flag. Because it mutates Rowan's system-owned
-// loaded-project registry (like load/unload/reload), it MUST run on a SystemUser
-// session; a plain user session raises a SecurityError. Commits the transaction
-// on success, aborts on error so nothing partial is left in the image.
+// that updates the dirty flag. Run as the working USER (never SystemUser): the
+// project is registered in the working user's dictionaries (that's where load put
+// it), so its dirty flag is theirs to update. Commits the transaction on success,
+// aborts on error so nothing partial is left in the image.
 export function commitRowanProject(
   execute: QueryExecutor, projectName: string,
 ): RowanCommitResult {

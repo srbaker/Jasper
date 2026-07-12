@@ -14,8 +14,12 @@ export interface RowanLoadResult {
 // even from a moved or freshly-cloned copy. On any failure the transaction is
 // aborted so nothing partial is committed.
 //
-// Must run on a SystemUser session: loading mutates Rowan's system-owned
-// registry (objectSecurityPolicyId 1), which DataCurator cannot write.
+// Run as the WORKING user (via a same-user transient loader session), not
+// SystemUser. Rowan registers the project's classes and loaded-project entry into
+// the LOADING user's symbol list; loading as SystemUser hides them from the
+// DataCurator session that browses and lists projects. Loading as the working user
+// lands them in dictionaries that session shares (verified on a stock 3.7.5 Rowan
+// stone); a transient loader keeps this commit off the working session.
 //
 // The Smalltalk builder and result parser are exported separately so the
 // extension can run this long operation over the NON-BLOCKING execute path

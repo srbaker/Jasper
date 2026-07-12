@@ -23,8 +23,9 @@ import {
 } from './enhancedInspectorPerfTracker';
 import { CodeExecutor } from './codeExecutor';
 import { SystemBrowser } from './systemBrowser';
-import { obtainSystemUserSession, refreshWorkingSession } from './systemUserSession';
-import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl } from './rowanLoad';
+import { refreshWorkingSession, loginAsWorkingUser } from './systemUserSession';
+import { openWebPreview } from './webPreview';
+import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl, parseGitRef } from './rowanLoad';
 import { NbCancelledError } from './nbRunner';
 import { RowanRepoRegistry } from './rowanRepos';
 import { RowanTreeProvider, RowanRepoItem, RowanLoadedProjectItem, RowanChangesProjectItem } from './rowanTreeProvider';
@@ -288,10 +289,12 @@ function validateRowanGitUrl(value: string): vscode.InputBoxValidationMessage | 
       severity: vscode.InputBoxValidationSeverity.Warning,
     };
   }
-  const normalized = normalizeGitUrl(v);
-  return normalized === v
+  const { url, ref } = parseGitRef(v);
+  const normalized = normalizeGitUrl(url);
+  const preview = ref ? `${normalized} (branch ${ref})` : normalized;
+  return preview === v
     ? undefined
-    : { message: `Will clone: ${normalized}`, severity: vscode.InputBoxValidationSeverity.Info };
+    : { message: `Will clone: ${preview}`, severity: vscode.InputBoxValidationSeverity.Info };
 }
 
 // True when `p` is already inside one of the open workspace folders.
@@ -347,17 +350,30 @@ async function loadRowanFromDirectory(
     }
   }
 
-  // Loading mutates Rowan's system registry — needs SystemUser.
-  const sys = await obtainSystemUserSession(session, `load Rowan project "${spec.name}"`);
-  if (!sys) return;
+  // Load on a transient session for the SAME (working) user — NOT a SystemUser
+  // session, and NOT the working session itself. Rowan registers a project's
+  // classes and its loaded-project entry into symbol dictionaries in the LOADING
+  // user's symbol list; loading as SystemUser buried both where the DataCurator
+  // working session (which the Rowan tree and System Browser query) could never
+  // see them — the project loaded and committed but "Loaded Projects" stayed empty.
+  // Loading as the working USER lands them in dictionaries this session shares; a
+  // separate transient session keeps the load's commit from sweeping in the working
+  // session's in-flight changes. Verified cross-session on a stock 3.7.5 Rowan stone.
+  const loader = loginAsWorkingUser(session);
+  if (!loader) {
+    vscode.window.showErrorMessage(
+      `Can't load "${spec.name}": this session's credentials aren't available to open a loader session. Reconnect and try again.`,
+    );
+    return;
+  }
 
   // Runs over the non-blocking execute: big projects load for minutes, and the
   // nb runner keeps the extension responsive and shows a cancellable progress
-  // notification. Cancelling hard-breaks the gem; the logout below then discards
-  // the aborted transaction, so nothing partial is committed.
+  // notification. Cancelling hard-breaks the loader gem; the logout below then
+  // discards the aborted transaction, so nothing partial is committed.
   let result;
   try {
-    result = await queries.loadRowanProjectNb(sys, spec.path, dir, `Loading ${spec.name}…`);
+    result = await queries.loadRowanProjectNb(loader, spec.path, dir, `Loading ${spec.name}…`);
   } catch (e: unknown) {
     if (e instanceof NbCancelledError) {
       vscode.window.showInformationMessage(`Load of "${spec.name}" cancelled.`);
@@ -366,23 +382,24 @@ async function loadRowanFromDirectory(
     }
     return;
   } finally {
-    try { session.gci.GciTsLogout(sys.handle); } catch { /* transient session */ }
+    try { session.gci.GciTsLogout(loader.handle); } catch { /* transient session */ }
   }
 
   if (!result.success) {
     vscode.window.showErrorMessage(`Load of "${spec.name}" failed: ${result.detail}`);
     return;
   }
-  // The load committed on the SystemUser session; refresh the working session's
-  // view so the new project is visible.
+  // The load committed on the same-user loader session; refresh the working
+  // session's view so the new project becomes visible here.
   await refreshWorkingSession(session, sessionManager, `Rowan project "${result.detail}" loaded.`);
 }
 
 // Write a loaded Rowan project's image state back to its own on-disk Tonel
 // source, in place (the inverse of loadRowanFromDirectory). Overwrites the disk
 // source with the image's version, so confirm first; the changes then show up in
-// Source Control for the user to git-commit. Clearing the dirty flag mutates
-// Rowan's system registry, so it runs over a transient SystemUser session.
+// Source Control for the user to git-commit. Runs over a same-user transient
+// session (never SystemUser — the project is registered in the working user's
+// dictionaries, so its dirty flag is the working user's to clear).
 async function commitRowanFromDirectory(
   session: ActiveSession, dir: string, sessionManager: SessionManager,
 ): Promise<void> {
@@ -397,16 +414,21 @@ async function commitRowanFromDirectory(
   );
   if (choice !== 'Commit to Disk') return;
 
-  const sys = await obtainSystemUserSession(session, `commit Rowan project "${projectName}" to disk`);
-  if (!sys) return;
+  const loader = loginAsWorkingUser(session);
+  if (!loader) {
+    vscode.window.showErrorMessage(
+      `Can't write "${projectName}" to disk: this session's credentials aren't available to open a loader session. Reconnect and try again.`,
+    );
+    return;
+  }
   let result;
   try {
-    result = queries.commitRowanProject(sys, projectName);
+    result = queries.commitRowanProject(loader, projectName);
   } catch (e: unknown) {
     vscode.window.showErrorMessage(`Commit of "${projectName}" to disk failed: ${e instanceof Error ? e.message : String(e)}`);
     return;
   } finally {
-    try { session.gci.GciTsLogout(sys.handle); } catch { /* transient session */ }
+    try { session.gci.GciTsLogout(loader.handle); } catch { /* transient session */ }
   }
 
   if (!result.success) {
@@ -1349,6 +1371,12 @@ export function activate(context: vscode.ExtensionContext) {
       openWorkspaceForSession(sessionManager, item),
     ),
 
+    // Open a running WebGS/Seaside endpoint in an in-editor Simple Browser tab.
+    // Takes an optional URL (callers pass an exact endpoint); prompts otherwise.
+    vscode.commands.registerCommand('gemstone.openWebPreview', (url?: unknown) =>
+      openWebPreview(typeof url === 'string' ? url : undefined),
+    ),
+
     vscode.commands.registerCommand('gemstone.rowanFindClassPackage', async () => {
       const session = await sessionManager.resolveSession();
       if (!session) return;
@@ -1430,17 +1458,22 @@ export function activate(context: vscode.ExtensionContext) {
       );
       if (confirm !== 'Unload') return;
 
-      const sys = await obtainSystemUserSession(session, `unload Rowan project "${projectName}"`);
-      if (!sys) return;
+      const loader = loginAsWorkingUser(session);
+      if (!loader) {
+        vscode.window.showErrorMessage(
+          `Can't unload "${projectName}": this session's credentials aren't available to open a loader session. Reconnect and try again.`,
+        );
+        return;
+      }
 
       let result;
       try {
         result = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: `Unloading ${projectName}…`, cancellable: false },
-          () => Promise.resolve(queries.unloadRowanProject(sys, projectName!)),
+          () => Promise.resolve(queries.unloadRowanProject(loader, projectName!)),
         );
       } finally {
-        try { session.gci.GciTsLogout(sys.handle); } catch { /* transient session */ }
+        try { session.gci.GciTsLogout(loader.handle); } catch { /* transient session */ }
       }
 
       if (!result.success) {
@@ -2774,21 +2807,28 @@ export function activate(context: vscode.ExtensionContext) {
       let gitUrl: string | undefined;
       if (source.origin === 'git') {
         const raw = (await vscode.window.showInputBox({
-          prompt: 'Git repository URL of the Rowan project',
-          placeHolder: 'https://github.com/owner/repo.git',
+          prompt: 'Git repository URL of the Rowan project (add #branch for a non-default branch)',
+          placeHolder: 'https://github.com/owner/repo.git#main',
           ignoreFocusOut: true,
           validateInput: validateRowanGitUrl,
         }))?.trim();
         if (!raw) return;
-        const url = normalizeGitUrl(raw);
+        // A trailing #branch/#tag clones that ref (Rowan projects often live on a
+        // feature branch, not the repo's default).
+        const { url: rawUrl, ref } = parseGitRef(raw);
+        const url = normalizeGitUrl(rawUrl);
         // Clone into the open workspace folder.
         const dest = rowanWorkspaceDest(deriveRepoName(url));
         if (!dest) return;
         if (!fs.existsSync(dest)) {
           try {
             await vscode.window.withProgress(
-              { location: vscode.ProgressLocation.Notification, title: `Cloning ${url}…`, cancellable: false },
-              () => cloneGitRepo(url, dest),
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: `Cloning ${url}${ref ? ` (${ref})` : ''}…`,
+                cancellable: false,
+              },
+              () => cloneGitRepo(url, dest, ref),
             );
           } catch (e: unknown) {
             vscode.window.showErrorMessage(`git clone failed: ${e instanceof Error ? e.message : String(e)}`);

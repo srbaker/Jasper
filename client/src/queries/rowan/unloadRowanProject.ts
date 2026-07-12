@@ -11,8 +11,9 @@ export interface RowanUnloadResult {
 // Unload a project from the image, then commit. Aborts on any failure so
 // nothing partial is committed — notably, unloading a project other loaded
 // projects depend on (a base project like Cypress) raises, and that message is
-// surfaced. Must run on a SystemUser session: unloading mutates Rowan's
-// system-owned registry, which DataCurator cannot write.
+// surfaced. Run as the working USER (never SystemUser): the project is
+// registered in the working user's dictionaries, so it's the working user's to
+// unload — and only that user's session can then see it gone.
 export function unloadRowanProject(execute: QueryExecutor, projectName: string): RowanUnloadResult {
   const esc = escapeString(projectName);
   const code = `| r sep |

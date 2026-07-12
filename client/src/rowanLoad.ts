@@ -113,14 +113,30 @@ export function normalizeGitUrl(raw: string): string {
   return url.replace(/\/+$/, '');
 }
 
+// Split an optional `#ref` (branch or tag) off a clone URL — the common
+// `git+https://host/owner/repo.git#branch` convention — so a project living on a
+// non-default branch can be cloned. SSH URLs (git@host:owner/repo.git) and https
+// URLs contain no `#`, so a lone `#` unambiguously introduces the ref.
+export function parseGitRef(raw: string): { url: string; ref?: string } {
+  const hash = raw.indexOf('#');
+  if (hash === -1) return { url: raw.trim() };
+  const ref = raw.slice(hash + 1).trim();
+  const url = raw.slice(0, hash).trim();
+  return ref ? { url, ref } : { url };
+}
+
 // Clone a git repository to `dest` using the user's own git (so their SSH keys /
 // credential helper apply — a gem-side clone wouldn't have them). Submodules are
 // cloned too: a Rowan project may vendor its package sources that way (e.g.
-// seaside-rowan), and without them the checkout is unloadable. Rejects with
-// git's stderr on failure.
-export function cloneGitRepo(url: string, dest: string): Promise<void> {
+// seaside-rowan), and without them the checkout is unloadable. `ref` clones a
+// specific branch/tag (a Rowan project is often on a feature branch, not the
+// repo's default). Rejects with git's stderr on failure.
+export function cloneGitRepo(url: string, dest: string, ref?: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['clone', '--recurse-submodules', url, dest], { timeout: 300_000 }, (err, _stdout, stderr) => {
+    const args = ['clone', '--recurse-submodules'];
+    if (ref) args.push('--branch', ref);
+    args.push(url, dest);
+    execFile('git', args, { timeout: 300_000 }, (err, _stdout, stderr) => {
       if (err) reject(new Error((stderr && stderr.trim()) || err.message));
       else resolve();
     });
