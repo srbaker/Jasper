@@ -14,8 +14,7 @@
     "test:ci": "xvfb-run -a npm test",
     "manual": "npm --prefix manual run manual",
     "manual:all": "bash scripts/build-manual.sh",
-    "manual:docker": "bash scripts/docker-manual.sh",
-    "manual:build": "npm --prefix manual run build"
+    "manual:docker": "bash scripts/docker-manual.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

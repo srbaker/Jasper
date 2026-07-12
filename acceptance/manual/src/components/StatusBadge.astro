@@ -1,9 +1,0 @@
----
-// A small coloured pill for a step/scenario/feature status. Generic.
-interface Props {
-  status: string;
-}
-const { status } = Astro.props;
----
-
-<span class:list={['status-badge', `status-${status}`]}>{status}</span>

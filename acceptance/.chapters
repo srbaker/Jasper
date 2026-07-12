@@ -1,0 +1,32 @@
+# The Jasper user manual — chapter order (the table of contents).
+#
+# "## " marks a section; each following line is a chapter, by its Feature name
+# (the `Feature:` line in the .feature file). Chapters listed but not yet tested
+# are skipped; generated chapters not listed here still appear, under "More".
+
+## Getting started
+The GemStone sidebar
+Trusting your workspace
+Downloading a GemStone release
+Installing Jasper
+
+## Databases & environment
+The GemStone Manager
+
+## Connecting to a stone
+A folder must be open to log in
+The Login Launcher
+Connecting to a stone
+
+## Writing Smalltalk
+Executing Smalltalk
+
+## Browsing the image
+The Stage Browser
+
+## Rowan projects
+Creating a Rowan project
+Working with a Rowan project
+A project's Rowan settings
+Loading a Rowan project into the image
+Committing changes to disk
