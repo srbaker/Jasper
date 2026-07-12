@@ -67,7 +67,10 @@ type Inbound =
   | { command: 'select'; id: string }
   | { command: 'connect'; id: string }
   | { command: 'disconnect'; id: string }
-  | { command: 'addLogin' };
+  | { command: 'addLogin' }
+  | { command: 'magicStart' }
+  | { command: 'setupOptions' }
+  | { command: 'connectExisting' };
 
 export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider {
   static readonly viewType = 'gemstoneLoginLauncher';
@@ -124,6 +127,18 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
       case 'addLogin':
         await vscode.commands.executeCommand('gemstone.addLogin');
         this.post();
+        return;
+      // First-run chooser (empty Sessions view).
+      case 'magicStart':
+        await vscode.commands.executeCommand('gemstone.magicStart');
+        return;
+      case 'setupOptions':
+        // Placeholder until the dedicated version/DB-settings form lands.
+        await vscode.commands.executeCommand('gemstone.quickSetup');
+        return;
+      case 'connectExisting':
+        // Placeholder until the dedicated "connect to an existing stone" form lands.
+        await vscode.commands.executeCommand('gemstone.addLogin');
         return;
     }
   }
@@ -257,6 +272,28 @@ body {
 .empty { font-size: 12px; color: var(--vscode-descriptionForeground, #9d9d9d); padding: 4px 2px; line-height: 1.5; }
 .linkbtn { color: var(--vscode-textLink-foreground, #3794ff); cursor: pointer; }
 .linkbtn:hover { text-decoration: underline; }
+
+/* First-run chooser (empty Sessions view) */
+.firstrun { padding: 2px; }
+.fr-lead { font-size: 12px; color: var(--vscode-descriptionForeground, #9d9d9d); margin: 2px 2px 8px; }
+.fr-card {
+  display: flex; align-items: flex-start; gap: 9px; width: 100%; text-align: left;
+  padding: 9px 10px; margin: 6px 0; border-radius: 6px; cursor: pointer;
+  color: var(--vscode-foreground); font: inherit;
+  background: var(--vscode-list-hoverBackground, rgba(128,128,128,.08));
+  border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.22));
+}
+.fr-card:hover { background: var(--vscode-list-activeSelectionBackground, rgba(128,128,128,.18)); }
+.fr-card.primary {
+  background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff);
+  border-color: var(--vscode-button-background, #0e639c);
+}
+.fr-card.primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+.fr-icon { flex: none; display: inline-flex; margin-top: 1px; }
+.fr-icon svg { width: 17px; height: 17px; }
+.fr-text { display: flex; flex-direction: column; gap: 2px; }
+.fr-title { font-size: 12.5px; font-weight: 600; }
+.fr-sub { font-size: 11px; opacity: .85; line-height: 1.35; }
 
 /* Dropdown */
 .menu {

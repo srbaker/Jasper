@@ -34,214 +34,226 @@ export interface QuickSetupDeps {
   refreshLogins: () => void;
 }
 
-export async function runQuickSetup(deps: QuickSetupDeps): Promise<void> {
-  const {
-    sysadminStorage, versionManager, databaseManager,
-    processManager, loginStorage,
-    refreshAdminViews, refreshVersions, refreshLogins,
-  } = deps;
+// Default names for the one-click database.
+const STONE_NAME = 'gs64stone';
+const LDI_NAME = 'gs64ldi';
+const BASE_EXTENT = 'extent0';
 
-  // ── Step 1: Check shared memory ─────────────────────────
-  if (process.platform !== 'win32') {
+/**
+ * Ensure shared memory is configured (Linux/macOS). Returns true to proceed
+ * (configured, or the user chose Skip); false if the user cancelled. If the user
+ * runs the setup script, re-checks after it closes.
+ */
+async function ensureSharedMemory(): Promise<boolean> {
+  if (process.platform === 'win32') return true;
+  for (;;) {
     const mem = await getSharedMemory();
     const shmmaxGb = mem ? mem.shmmax / Math.pow(2, 30) : 0;
     const shmallGb = mem ? mem.shmall / Math.pow(2, 18) : 0;
-    if (shmmaxGb < 1 || shmallGb < 1) {
-      const choice = await vscode.window.showWarningMessage(
-        'Shared memory is not configured (< 1 GB). Run the setup script first?',
-        { modal: true },
-        'Run Setup Script',
-        'Skip',
-      );
-      if (choice === 'Run Setup Script') {
-        await vscode.commands.executeCommand(
-          process.platform === 'linux'
-            ? 'gemstone.runSetSharedMemoryLinux'
-            : 'gemstone.runSetSharedMemory',
-        );
-        await waitForTerminalClose('GemStone: Shared Memory Setup');
-        return runQuickSetup(deps);
-      }
-      if (choice !== 'Skip') return; // cancelled
-    }
-  }
-
-  // ── Step 2: Fetch available versions ────────────────────
-  let versions: GemStoneVersion[];
-  try {
-    versions = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Quick Setup: Fetching available versions...' },
-      () => versionManager.fetchAvailableVersions(),
+    if (shmmaxGb >= 1 && shmallGb >= 1) return true;
+    const choice = await vscode.window.showWarningMessage(
+      'Shared memory is not configured (< 1 GB). Run the setup script first?',
+      { modal: true },
+      'Run Setup Script',
+      'Skip',
     );
+    if (choice === 'Run Setup Script') {
+      await vscode.commands.executeCommand(
+        process.platform === 'linux'
+          ? 'gemstone.runSetSharedMemoryLinux'
+          : 'gemstone.runSetSharedMemory',
+      );
+      await waitForTerminalClose('GemStone: Shared Memory Setup');
+      continue; // re-check
+    }
+    if (choice === 'Skip') return true;
+    return false; // cancelled
+  }
+}
+
+/** Fetch the available versions, surfacing failures as error messages. */
+async function fetchVersions(deps: QuickSetupDeps): Promise<GemStoneVersion[] | null> {
+  try {
+    const versions = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'GemStone: Fetching available versions…' },
+      () => deps.versionManager.fetchAvailableVersions(),
+    );
+    if (versions.length === 0) {
+      vscode.window.showErrorMessage('No GemStone versions available for this platform.');
+      return null;
+    }
+    return versions;
   } catch (e) {
     vscode.window.showErrorMessage(`Failed to fetch versions: ${e instanceof Error ? e.message : e}`);
-    return;
+    return null;
   }
-  if (versions.length === 0) {
-    vscode.window.showErrorMessage('No GemStone versions available for this platform.');
-    return;
-  }
+}
 
-  // ── Step 3: Pick version ────────────────────────────────
-  const latest = versions[0];
-  const items = versions.map(v => ({
-    label: v.version,
-    description: v.extracted ? 'extracted' : v.downloaded ? 'downloaded' : '',
-    version: v,
-  }));
-  const pick = await vscode.window.showQuickPick(items, {
-    title: 'GemStone Quick Setup',
-    placeHolder: `Select a version (latest: ${latest.version})`,
-  });
-  if (!pick) return;
-  const version = pick.version;
+/** The best version to use with no prompt: newest already-installed, else newest available. */
+function pickBestVersion(versions: GemStoneVersion[]): GemStoneVersion {
+  return versions.find((v) => v.extracted) ?? versions.find((v) => v.downloaded) ?? versions[0];
+}
 
-  // ── Step 4: Download if needed ──────────────────────────
+/** Download + extract the version if it isn't installed yet. Returns false on failure. */
+async function ensureInstalled(deps: QuickSetupDeps, version: GemStoneVersion): Promise<boolean> {
   if (!version.downloaded && !version.extracted) {
     try {
       await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: `Quick Setup: Downloading GemStone ${version.version}...`,
-          cancellable: true,
-        },
-        (progress, token) => versionManager.download(version, progress, token),
+        { location: vscode.ProgressLocation.Notification, title: `GemStone: Downloading ${version.version}…`, cancellable: true },
+        (progress, token) => deps.versionManager.download(version, progress, token),
       );
       version.downloaded = true;
-      refreshVersions();
+      deps.refreshVersions();
     } catch (e) {
       vscode.window.showErrorMessage(`Download failed: ${e instanceof Error ? e.message : e}`);
-      return;
+      return false;
     }
   }
-
-  // ── Step 5: Extract if needed ───────────────────────────
   if (!version.extracted) {
     try {
       await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: `Quick Setup: Extracting GemStone ${version.version}...`,
-        },
-        (progress) => versionManager.extract(version, progress),
+        { location: vscode.ProgressLocation.Notification, title: `GemStone: Extracting ${version.version}…` },
+        (progress) => deps.versionManager.extract(version, progress),
       );
       version.extracted = true;
-      refreshVersions();
+      deps.refreshVersions();
     } catch (e) {
       vscode.window.showErrorMessage(`Extraction failed: ${e instanceof Error ? e.message : e}`);
-      return;
+      return false;
     }
   }
+  return true;
+}
 
-  // ── Step 6: Create database ─────────────────────────────
-  const stoneName = 'gs64stone';
-  const ldiName = 'gs64ldi';
-  const baseExtent = 'extent0';
+/** Resolve and store the GCI library path for this version's DataCurator login. */
+async function configureGciLibrary(deps: QuickSetupDeps, version: GemStoneVersion): Promise<void> {
+  const bundledDll = isWindows() ? bundledWindowsClientGciPath(version.version) : undefined;
+  if (bundledDll) {
+    await deps.loginStorage.setGciLibraryPath(version.version, bundledDll);
+    appendSysadmin(`Using GCI library bundled with the extension: ${bundledDll}`);
+    return;
+  }
+  if (isWindows()) {
+    try {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `GemStone: Installing Windows client ${version.version}…`, cancellable: true },
+        (progress, token) => deps.versionManager.downloadAndExtractWindowsClient(version.version, progress, token),
+      );
+      const dllPath = deps.sysadminStorage.getWindowsClientGciPath(version.version);
+      if (dllPath) await deps.loginStorage.setGciLibraryPath(version.version, dllPath);
+      deps.refreshVersions();
+    } catch (e) {
+      appendSysadmin(`Windows client install failed: ${e instanceof Error ? e.message : e}`);
+    }
+    return;
+  }
+  const gsPath = deps.sysadminStorage.getGemstonePath(version.version);
+  if (gsPath) {
+    const ext = process.platform === 'darwin' ? 'dylib' : 'so';
+    const libPath = path.join(gsPath, 'lib', `libgcits-${version.version}-64.${ext}`);
+    if (fs.existsSync(libPath)) await deps.loginStorage.setGciLibraryPath(version.version, libPath);
+  }
+}
+
+interface Provisioned {
+  db: { dirName: string };
+  login: {
+    label: string; version: string; gem_host: string; stone: string;
+    gs_user: string; gs_password: string; netldi: string; host_user: string; host_password: string;
+  };
+}
+
+/**
+ * Install (if needed) → create the database → start stone + NetLDI → create and
+ * save the DataCurator login. Shared by Quick Setup and the one-click Get Started.
+ * Returns the saved login (and db), or null on any failure (already surfaced).
+ */
+async function provisionDatabase(deps: QuickSetupDeps, version: GemStoneVersion): Promise<Provisioned | null> {
+  if (!(await ensureInstalled(deps, version))) return null;
+
   let db;
   try {
     db = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Quick Setup: Creating database...',
-      },
-      (progress) => databaseManager.createDatabaseDirect(
-        version.version, baseExtent, stoneName, ldiName, progress,
-      ),
+      { location: vscode.ProgressLocation.Notification, title: 'GemStone: Creating database…' },
+      (progress) => deps.databaseManager.createDatabaseDirect(version.version, BASE_EXTENT, STONE_NAME, LDI_NAME, progress),
     );
-    refreshAdminViews();
+    deps.refreshAdminViews();
   } catch (e) {
     vscode.window.showErrorMessage(`Database creation failed: ${e instanceof Error ? e.message : e}`);
-    return;
+    return null;
   }
 
-  // ── Step 7: Start stone ─────────────────────────────────
   try {
     await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Quick Setup: Starting stone ${stoneName}...`,
-      },
-      () => processManager.startStone(db),
+      { location: vscode.ProgressLocation.Notification, title: `GemStone: Starting stone ${STONE_NAME}…` },
+      () => deps.processManager.startStone(db),
     );
-    refreshAdminViews();
-  } catch (e) {
-    vscode.window.showErrorMessage(`Failed to start stone: ${e instanceof Error ? e.message : e}`);
-    return;
-  }
-
-  // ── Step 8: Start NetLDI ────────────────────────────────
-  try {
     await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Quick Setup: Starting NetLDI ${ldiName}...`,
-      },
-      () => processManager.startNetldi(db),
+      { location: vscode.ProgressLocation.Notification, title: `GemStone: Starting NetLDI ${LDI_NAME}…` },
+      () => deps.processManager.startNetldi(db),
     );
-    refreshAdminViews();
+    deps.refreshAdminViews();
   } catch (e) {
-    vscode.window.showErrorMessage(`Failed to start NetLDI: ${e instanceof Error ? e.message : e}`);
-    return;
+    vscode.window.showErrorMessage(`Failed to start the database: ${e instanceof Error ? e.message : e}`);
+    return null;
   }
 
-  // ── Step 9: Create login ────────────────────────────────
+  await configureGciLibrary(deps, version);
   const login = {
-    label: '',
-    version: version.version,
-    gem_host: 'localhost',
-    stone: stoneName,
-    gs_user: 'DataCurator',
-    gs_password: 'swordfish',
-    netldi: ldiName,
-    host_user: '',
-    host_password: '',
+    label: '', version: version.version, gem_host: 'localhost', stone: STONE_NAME,
+    gs_user: 'DataCurator', gs_password: 'swordfish', netldi: LDI_NAME, host_user: '', host_password: '',
   };
+  await deps.loginStorage.saveLogin(login);
+  deps.refreshLogins();
+  return { db, login };
+}
 
-  // Auto-detect GCI library path
-  const bundledDll = isWindows() ? bundledWindowsClientGciPath(version.version) : undefined;
-  if (bundledDll) {
-    // A GCI DLL ships with the extension (secure/air-gapped build) — use it
-    // directly and skip the network download.
-    await loginStorage.setGciLibraryPath(version.version, bundledDll);
-    appendSysadmin(`Using GCI library bundled with the extension: ${bundledDll}`);
-  } else if (isWindows()) {
-    // Download and extract the Windows client for this version so the
-    // native GCI DLL is available for login.
-    try {
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: `Quick Setup: Installing Windows client ${version.version}...`,
-          cancellable: true,
-        },
-        (progress, token) =>
-          versionManager.downloadAndExtractWindowsClient(version.version, progress, token),
-      );
-      const dllPath = sysadminStorage.getWindowsClientGciPath(version.version);
-      if (dllPath) {
-        await loginStorage.setGciLibraryPath(version.version, dllPath);
-      }
-      refreshVersions();
-    } catch (e) {
-      appendSysadmin(`Windows client install failed: ${e instanceof Error ? e.message : e}`);
-      // Non-fatal: the user can still manually configure the GCI library
-    }
-  } else {
-    const gsPath = sysadminStorage.getGemstonePath(version.version);
-    if (gsPath) {
-      const ext = process.platform === 'darwin' ? 'dylib' : 'so';
-      const libPath = path.join(gsPath, 'lib', `libgcits-${version.version}-64.${ext}`);
-      if (fs.existsSync(libPath)) {
-        await loginStorage.setGciLibraryPath(version.version, libPath);
-      }
-    }
-  }
+/**
+ * Guided setup: prompts for the version, then provisions a database and tells the
+ * user how to connect. (The Command Palette / Settings entry point.)
+ */
+export async function runQuickSetup(deps: QuickSetupDeps): Promise<void> {
+  if (!(await ensureSharedMemory())) return;
+  const versions = await fetchVersions(deps);
+  if (!versions) return;
 
-  await loginStorage.saveLogin(login);
-  refreshLogins();
+  const latest = versions[0];
+  const pick = await vscode.window.showQuickPick(
+    versions.map((v) => ({
+      label: v.version,
+      description: v.extracted ? 'extracted' : v.downloaded ? 'downloaded' : '',
+      version: v,
+    })),
+    { title: 'GemStone Quick Setup', placeHolder: `Select a version (latest: ${latest.version})` },
+  );
+  if (!pick) return;
+
+  const provisioned = await provisionDatabase(deps, pick.version);
+  if (!provisioned) return;
 
   appendSysadmin('Quick Setup complete');
   vscode.window.showInformationMessage(
-    `Quick Setup complete! Database "${db.dirName}" is running. Use the login "DataCurator on ${stoneName} (localhost)" to connect.`,
+    `Quick Setup complete! Database "${provisioned.db.dirName}" is running. ` +
+      `Use the login "DataCurator on ${STONE_NAME} (localhost)" to connect.`,
   );
+}
+
+/**
+ * One click, zero prompts: latest GemStone (downloaded if needed) → a fresh
+ * database, started → connected → a workspace open, ready to type. The magical
+ * "Get Started" button in the empty Sessions view.
+ */
+export async function magicStart(deps: QuickSetupDeps): Promise<void> {
+  if (!(await ensureSharedMemory())) return;
+  const versions = await fetchVersions(deps);
+  if (!versions) return;
+
+  const provisioned = await provisionDatabase(deps, pickBestVersion(versions));
+  if (!provisioned) return;
+
+  appendSysadmin('Get Started: provisioned; connecting');
+  // Connect without the open-folder guard (there's nothing to open on first run),
+  // then open a workspace so there's somewhere to type — the "show the UI" step.
+  await vscode.commands.executeCommand('gemstone.login', { login: provisioned.login, skipFolderCheck: true });
+  await vscode.commands.executeCommand('gemstone.openWorkspace');
 }

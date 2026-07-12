@@ -99,7 +99,7 @@ import { DEFAULT_MCP_HTTP_PORT, McpHttpServer } from './mcpHttpServer';
 import { ensureSelfSignedCert, trustCertCommand } from './tlsCert';
 import { ProcessTreeProvider, ProcessItem } from './processTreeProvider';
 import { OsConfigTreeProvider } from './sharedMemoryTreeProvider';
-import { runQuickSetup } from './quickSetup';
+import { runQuickSetup, magicStart, QuickSetupDeps } from './quickSetup';
 import {
   isWindows,
   getWslInfo,
@@ -1063,8 +1063,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('gemstone.login', async (item: GemStoneLoginItem) => {
-      if (!vscode.workspace.workspaceFolders?.length) {
+    vscode.commands.registerCommand('gemstone.login', async (item: GemStoneLoginItem & { skipFolderCheck?: boolean }) => {
+      // The one-click Get Started connects with no folder open (there's nothing to
+      // open on first run), so it passes skipFolderCheck. Every other caller still
+      // requires a folder for Jasper's file-backed features.
+      if (!item?.skipFolderCheck && !vscode.workspace.workspaceFolders?.length) {
         vscode.window.showErrorMessage(
           'Please open a folder in the workspace before logging in to GemStone.',
         );
@@ -2898,19 +2901,21 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // ── Quick Setup ──────────────────────────────────────────
+  const quickSetupDeps = (): QuickSetupDeps => ({
+    sysadminStorage,
+    versionManager,
+    databaseManager,
+    processManager,
+    loginStorage: storage,
+    refreshAdminViews,
+    refreshVersions: () => versionProvider.loadVersions(),
+    refreshLogins: () => treeProvider.refresh(),
+  });
   context.subscriptions.push(
-    vscode.commands.registerCommand('gemstone.quickSetup', () =>
-      runQuickSetup({
-        sysadminStorage,
-        versionManager,
-        databaseManager,
-        processManager,
-        loginStorage: storage,
-        refreshAdminViews,
-        refreshVersions: () => versionProvider.loadVersions(),
-        refreshLogins: () => treeProvider.refresh(),
-      }),
-    ),
+    vscode.commands.registerCommand('gemstone.quickSetup', () => runQuickSetup(quickSetupDeps())),
+    // One-click Get Started (the ⚡ button in the empty Sessions view): latest
+    // GemStone → fresh database → connected → workspace open, zero prompts.
+    vscode.commands.registerCommand('gemstone.magicStart', () => magicStart(quickSetupDeps())),
   );
 
   // ── SysAdmin Commands ───────────────────────────────────
