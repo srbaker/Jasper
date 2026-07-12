@@ -24,13 +24,18 @@ Then('the Rowan view lists the {string} package', async ({ window, screen }, pkg
   await screen('The Rowan view listing the project packages');
 });
 
-Then('expanding the package reveals the {string} class and its methods', async ({ window, screen }, cls: string) => {
+Then('the {string} package contains the {string} class', async ({ window, screen }, pkg: string, cls: string) => {
   const view = new RowanProjectView(window);
-  await view.expand(/HelloRowan-Core/);
+  await view.expand(pkg);
   await expect(view.item(cls)).toBeVisible({ timeout: 15_000 });
-  await view.expand(new RegExp(cls));
-  await expect(view.item(/greet:/)).toBeVisible({ timeout: 15_000 });
-  await screen('Drilling into a class and its methods');
+  await screen('A package expanded to its classes');
+});
+
+Then('the {string} class has a {string} method', async ({ window, screen }, cls: string, method: string) => {
+  const view = new RowanProjectView(window);
+  await view.expand(cls);
+  await expect(view.item(method)).toBeVisible({ timeout: 15_000 });
+  await screen('A class expanded to its methods');
 });
 
 When('I open the {string} method from the Rowan view', async ({ window }, selector: string) => {

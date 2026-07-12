@@ -9,7 +9,8 @@ Feature: Working with a Rowan project
   Scenario: Jasper recognizes the project and shows its structure
     Given I have opened the HelloRowan project
     Then the Rowan view lists the "HelloRowan-Core" package
-    And expanding the package reveals the "Greeter" class and its methods
+    And the "HelloRowan-Core" package contains the "Greeter" class
+    And the "Greeter" class has a "greet:" method
 
   @rowan-project
   Scenario: Opening a method for focused, disk-first editing

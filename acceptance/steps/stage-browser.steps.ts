@@ -21,18 +21,19 @@ When('I find the {string} class in the browser', async ({ window }, className: s
   await picker.locator('.monaco-list-row').filter({ hasText: className }).first().click();
 });
 
-Then('the Stage Browser shows the {string} class and its methods', async ({ window, screen }, className: string) => {
+Then('the {string} class is shown in the Classes pane', async ({ window, screen }, className: string) => {
   const sb = new StageBrowser(window);
-
   await sb.openPane('Classes');
   await expect(sb.row('Classes', className)).toBeVisible({ timeout: 30_000 });
+  await screen('The Classes pane, homed in on the class');
+});
 
+Then('its methods appear in the Methods pane', async ({ window, screen }) => {
+  const sb = new StageBrowser(window);
   await sb.openPane('Methods');
-  // The Methods pane opens on the instance side with an "ALL METHODS" node — both
-  // sit at the top, so they're stable to assert without scrolling the list.
+  // The Methods pane opens on the instance side — a stable top row to assert.
   await expect(sb.pane('Methods').getByText('instance', { exact: true })).toBeVisible({ timeout: 15_000 });
-
-  await screen('The Stage Browser, homed in on a class and its methods');
+  await screen("The class's methods");
 });
 
 Then('the hierarchy shows {string} above {string}', async ({ window, screen }, ancestor: string, cls: string) => {

@@ -9,7 +9,8 @@ Feature: The Stage Browser
   Scenario: Browsing to a class and its methods
     Given I am logged in to the test stone
     When I find the "Array" class in the browser
-    Then the Stage Browser shows the "Array" class and its methods
+    Then the "Array" class is shown in the Classes pane
+    And its methods appear in the Methods pane
 
   @stone
   Scenario: Seeing where a class sits in the hierarchy
