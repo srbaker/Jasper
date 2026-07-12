@@ -1,12 +1,15 @@
 RwLoadSpecificationV2 {
-	#specName : 'HelloRowan',
+	#projectName : 'HelloRowan',
 	#projectSpecFile : 'rowan/project.ston',
 	#componentNames : [
 		'Core'
 	],
 	#platformProperties : {
 		'gemstone' : {
-			#defaultSymbolDictName : 'HelloRowan'
+			'allusers' : {
+				#defaultSymbolDictName : 'UserGlobals'
+			}
 		}
-	}
+	},
+	#comment : ''
 }

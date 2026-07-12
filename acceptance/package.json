@@ -6,10 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "bdd": "bddgen",
-    "test": "bddgen && playwright test --grep-invert \"@tricky|@download|@stone\"",
+    "test": "bddgen && playwright test --grep-invert \"@tricky|@download|@stone|@wip\"",
     "test:tricky": "bddgen && playwright test --grep @tricky",
     "test:download": "bddgen && playwright test --grep @download",
-    "test:stone": "bddgen && playwright test --grep @stone",
+    "test:stone": "bddgen && playwright test --grep @stone --grep-invert @wip",
     "test:docker": "bash scripts/docker-test.sh",
     "test:ci": "xvfb-run -a npm test",
     "manual": "npm --prefix manual run manual",

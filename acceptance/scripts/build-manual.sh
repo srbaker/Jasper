@@ -18,13 +18,13 @@ rm -rf cucumber-report && mkdir -p cucumber-report
 npx bddgen
 
 echo "==> core chapters (always on)"
-FEED=core npx playwright test --grep-invert "@tricky|@download|@stone" || true
+FEED=core npx playwright test --grep-invert "@tricky|@download|@stone|@wip" || true
 
 for group in "$@"; do
   case "$group" in
     download) echo "==> download";  FEED=download npx playwright test --grep @download || true ;;
     install)  echo "==> install";   FEED=install  npx playwright test --grep @tricky   || true ;;
-    stone)    echo "==> stone";     FEED=stone    npx playwright test --grep @stone     || true ;;
+    stone)    echo "==> stone";     FEED=stone    npx playwright test --grep @stone --grep-invert @wip || true ;;
     *) echo "warning: unknown group '$group' (use: download install stone)" >&2 ;;
   esac
 done

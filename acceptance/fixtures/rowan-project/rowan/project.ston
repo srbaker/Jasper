@@ -1,9 +1,12 @@
-RwProjectSpecificationV2 {
+RwProjectSpecificationV3 {
 	#specName : 'project',
-	#projectSpecFile : 'rowan/project.ston',
+	#projectVersion : '1.0.0',
+	#projectSpecPath : 'rowan',
 	#componentsPath : 'rowan/components',
 	#packagesPath : 'src',
+	#projectsPath : 'rowan/projects',
 	#specsPath : 'rowan/specs',
 	#packageFormat : 'tonel',
-	#packageConvention : 'Rowan'
+	#packageConvention : 'RowanHybrid',
+	#comment : ''
 }

@@ -28,7 +28,7 @@ indocker() { # FEED  playwright-args...
 }
 
 echo "==> core + stone chapters (headless)"
-indocker main "--grep-invert '@tricky|@download'"
+indocker main "--grep-invert '@tricky|@download|@wip'"
 
 for group in "$@"; do
   case "$group" in
