@@ -18,6 +18,10 @@
 
 # Table of Contents
 
+## Quickstart
+
+- From a fresh install to a running web application
+
 ## Getting started
 
 - The GemStone sidebar
@@ -28,13 +32,12 @@
 ## Databases & environment
 
 - The GemStone Manager
-- Creating a database
 
 ## Connecting to a stone
 
 - A folder must be open to log in
-- Connecting to a stone
 - The Login Launcher
+- Connecting to a stone
 
 ## Writing Smalltalk
 
@@ -50,3 +53,7 @@
 - Working with a Rowan project
 - A project's Rowan settings
 - Committing changes to disk
+
+## Reference
+
+- Glossary
