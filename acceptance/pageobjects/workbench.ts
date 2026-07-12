@@ -33,14 +33,17 @@ export class Workbench {
   }
 
   /**
-   * Ensure the Explorer sidebar is open. Clicking an already-active activity-bar
-   * item toggles the sidebar *shut*, and the Explorer is open by default on a
-   * fresh folder — so only click when the sidebar is currently closed.
+   * Ensure the Explorer sidebar (its "Files Explorer" tree) is showing — switching
+   * to it if a DIFFERENT sidebar (e.g. the GemStone view) is currently open. Gate
+   * on the Files Explorer tree itself, not just "some sidebar is visible": clicking
+   * an already-active activity-bar item toggles the sidebar shut, so we click only
+   * when the Files Explorer isn't already the visible view.
    */
   async openExplorer(): Promise<void> {
-    if (!(await this.sidebar.isVisible())) {
+    const filesTree = this.page.getByRole('tree', { name: 'Files Explorer' });
+    if (!(await filesTree.isVisible().catch(() => false))) {
       await this.page.locator('.activitybar [aria-label^="Explorer"]').first().click();
     }
-    await expect(this.sidebar).toBeVisible();
+    await expect(filesTree).toBeVisible();
   }
 }

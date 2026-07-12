@@ -341,8 +341,21 @@
       "gemstone": [
         {
           "id": "gemstoneLoginLauncher",
-          "name": "Login",
+          "name": "Sessions",
           "type": "webview"
+        },
+        {
+          "id": "gemstoneRowan",
+          "name": "Rowan",
+          "type": "tree",
+          "icon": "$(package)"
+        },
+        {
+          "id": "gemstoneRowanProject",
+          "name": "This Project",
+          "type": "tree",
+          "icon": "$(package)",
+          "when": "gemstone.workspaceIsRowanProject"
         },
         {
           "id": "gemstoneStageDicts",
@@ -385,12 +398,6 @@
           "size": 4
         },
         {
-          "id": "gemstoneRowan",
-          "name": "Rowan",
-          "type": "tree",
-          "icon": "$(package)"
-        },
-        {
           "id": "gemstoneMcpServer",
           "name": "MCP Server",
           "type": "tree",
@@ -403,15 +410,6 @@
           "type": "tree",
           "icon": "$(eye)",
           "when": "gemstone.connected"
-        }
-      ],
-      "explorer": [
-        {
-          "id": "gemstoneRowanProject",
-          "name": "Rowan",
-          "type": "tree",
-          "icon": "$(package)",
-          "when": "gemstone.workspaceIsRowanProject"
         }
       ]
     },

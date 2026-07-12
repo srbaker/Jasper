@@ -23,5 +23,5 @@ When('I open the GemStone sidebar', async ({ window }) => {
 
 Then('I see the GemStone views', async ({ window }) => {
   const workbench = new Workbench(window);
-  await expect(workbench.view('Login')).toBeVisible();
+  await expect(workbench.view('Sessions')).toBeVisible();
 });

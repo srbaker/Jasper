@@ -13,7 +13,8 @@ import { RowanProjectView } from '../pageobjects/rowanProject';
 const { Given, When, Then } = createBdd(test);
 
 Given('I have opened the HelloRowan project', async ({ window }) => {
-  await new Workbench(window).openExplorer();
+  // The disk-first "This Project" view lives in the GemStone sidebar now.
+  await new Workbench(window).openGemStoneSidebar();
 });
 
 Then('the Rowan view lists the {string} package', async ({ window }, pkg: string) => {

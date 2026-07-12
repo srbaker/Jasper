@@ -1,20 +1,20 @@
 /**
- * Page Object over the "Rowan" project view — the disk-first tree Jasper shows in
- * the Explorer when the open folder is a Rowan project (packages → classes →
- * methods, read straight from the Tonel source). Its section header reads e.g.
- * "Rowan - HelloRowan Section" (the project name is the section description).
+ * Page Object over the "This Project" view — the disk-first tree Jasper shows in
+ * the GemStone sidebar when the open folder is a Rowan project (packages → classes
+ * → methods, read straight from the Tonel source). Its section header reads e.g.
+ * "This Project - HelloRowan Section" (the project name is the section description).
  */
 import { Page, Locator } from '@playwright/test';
 
 export class RowanProjectView {
   constructor(private readonly page: Page) {}
 
-  /** The Rowan pane's collapsible section-header toggle. */
+  /** The "This Project" pane's collapsible section-header toggle. */
   get header(): Locator {
-    return this.page.getByRole('button', { name: /Rowan.*Section/ });
+    return this.page.getByRole('button', { name: /This Project.*Section/ });
   }
 
-  /** The "Rowan" pane inside the Explorer. */
+  /** The "This Project" pane inside the GemStone sidebar. */
   get pane(): Locator {
     return this.page.locator('.pane', { has: this.header });
   }

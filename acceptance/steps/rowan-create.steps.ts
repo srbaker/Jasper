@@ -25,8 +25,7 @@ When('I create a Rowan project from the Rowan view', async ({ window }) => {
 });
 
 Then('the folder becomes a Rowan project', async ({ window }) => {
-  // Creation flips the gemstone.workspaceIsRowanProject context, which reveals
-  // the disk-first Rowan view in the Explorer.
-  await new Workbench(window).openExplorer();
+  // Creation flips the gemstone.workspaceIsRowanProject context, which reveals the
+  // disk-first "This Project" view in the (already open) GemStone sidebar.
   await expect(new RowanProjectView(window).header).toBeVisible({ timeout: 30_000 });
 });
