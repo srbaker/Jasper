@@ -7,10 +7,26 @@
  * Rows are matched inside the sidebar's `tree "Rowan"` by visible text; the repo
  * row's accessible name is its filesystem path, so text is the stable handle.
  */
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
+import { runCommand } from './palette';
 
 export class RowanView {
   constructor(private readonly page: Page) {}
+
+  /** Add a Rowan repository by cloning a git URL — drive the "Add Rowan
+   *  Repository…" command, choose "Clone from Git URL", and enter the URL (which
+   *  may carry a `#branch`). Returns once the URL is submitted; the clone then
+   *  runs and the repo row appears under Repositories. */
+  async addRepoFromGit(url: string): Promise<void> {
+    await runCommand(this.page, 'Add Rowan Repository');
+    const qi = this.page.locator('.quick-input-widget');
+    const clone = qi.locator('.monaco-list-row').filter({ hasText: 'Clone from Git URL' });
+    await expect(clone).toBeVisible({ timeout: 15_000 });
+    await clone.click();
+    await expect(qi.locator('input.input')).toBeVisible();
+    await this.page.keyboard.type(url);
+    await this.page.keyboard.press('Enter');
+  }
 
   /** The gemstoneRowan tree in the sidebar. */
   get tree(): Locator {
@@ -46,10 +62,17 @@ export class RowanView {
     if ((await row.getAttribute('aria-expanded')) === 'false') await row.click();
   }
 
-  /** Click the inline "Load into Image" action on a repository row. */
-  async loadIntoImage(repo: string | RegExp): Promise<void> {
+  /** Click the inline "Load into Image" action on a repository row. A project
+   *  with more than one load spec then shows a "which spec?" QuickPick — pass
+   *  `spec` (matched against the option text) to choose one. */
+  async loadIntoImage(repo: string | RegExp, spec?: string | RegExp): Promise<void> {
     const row = this.row(repo).first();
     await row.hover();
     await row.getByRole('button', { name: 'Load into Image' }).click();
+    if (spec !== undefined) {
+      const option = this.page.locator('.quick-input-widget .monaco-list-row').filter({ hasText: spec });
+      await expect(option.first()).toBeVisible({ timeout: 15_000 });
+      await option.first().click();
+    }
   }
 }
