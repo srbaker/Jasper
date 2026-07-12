@@ -11,3 +11,10 @@ Feature: Getting started from a blank slate
     Then I am offered to get started in one click
     And I can choose to set up with options
     And I can choose to connect to an existing stone
+
+  @firstrun
+  Scenario: Connecting to an existing stone opens a login form
+    Given a fresh VS Code with the Jasper extension
+    When I open the GemStone sidebar
+    And I choose to connect to an existing stone
+    Then a form for the connection details appears

@@ -148,8 +148,7 @@ export class GemstoneLoginLauncherProvider implements vscode.WebviewViewProvider
         await vscode.commands.executeCommand('gemstone.setupWithOptions');
         return;
       case 'connectExisting':
-        // Placeholder until the dedicated "connect to an existing stone" form lands.
-        await vscode.commands.executeCommand('gemstone.addLogin');
+        await vscode.commands.executeCommand('gemstone.connectExistingStone');
         return;
     }
   }

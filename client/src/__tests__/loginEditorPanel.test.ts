@@ -97,7 +97,7 @@ describe('LoginEditorPanel', () => {
       const panel = (window.createWebviewPanel as any).mock.results[0].value;
       const html = panel.webview.html;
 
-      expect(html).toContain('GemStone Login Parameters');
+      expect(html).toContain('GemStone login');
       expect(html).toContain('id="version"');
       expect(html).toContain('id="gem_host"');
       expect(html).toContain('id="stone"');
@@ -266,19 +266,19 @@ describe('LoginEditorPanel', () => {
   });
 
   describe('OS keychain option', () => {
-    it('renders a "Store password in OS keychain" checkbox in the HTML', () => {
+    it('renders a "Store password in the OS keychain" checkbox in the HTML', () => {
       LoginEditorPanel.show(storage, secrets as any, treeProvider);
       const panel = (window.createWebviewPanel as any).mock.results[0].value;
       const html = panel.webview.html;
 
       expect(html).toContain('id="password_in_keychain"');
-      expect(html).toContain('Store password in OS keychain');
+      expect(html).toContain('Store password in the OS keychain');
     });
 
     it('renders a hint about leaving the password blank to be prompted', () => {
       LoginEditorPanel.show(storage, secrets as any, treeProvider);
       const panel = (window.createWebviewPanel as any).mock.results[0].value;
-      expect(panel.webview.html).toContain('Leave password blank to be prompted on each login');
+      expect(panel.webview.html).toContain('Leave blank to be prompted each time you connect');
     });
 
     it('pre-fills password from SecretStorage when editing a keychain-backed login', async () => {

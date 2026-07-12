@@ -989,6 +989,12 @@ export function activate(context: vscode.ExtensionContext) {
       LoginEditorPanel.show(storage, context.secrets, treeProvider, undefined, sysadminStorage);
     }),
 
+    // "Connect to an existing stone" (the 🔌 card): the login form, but it connects
+    // right after saving.
+    vscode.commands.registerCommand('gemstone.connectExistingStone', () => {
+      LoginEditorPanel.show(storage, context.secrets, treeProvider, undefined, sysadminStorage, true);
+    }),
+
     vscode.commands.registerCommand('gemstone.editLogin', (item: GemStoneLoginItem) => {
       if (loginHasActiveSession(item.login)) {
         vscode.window.showWarningMessage(
