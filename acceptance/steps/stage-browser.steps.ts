@@ -40,3 +40,17 @@ Then('the hierarchy shows {string} above {string}', async ({ window }, ancestor:
   await expect(sb.row('Hierarchy', ancestor)).toBeVisible({ timeout: 30_000 });
   await expect(sb.row('Hierarchy', cls)).toBeVisible({ timeout: 15_000 });
 });
+
+When('I select the {string} dictionary', async ({ window }, dict: string) => {
+  const sb = new StageBrowser(window);
+  await sb.openPane('Dictionaries');
+  await sb.row('Dictionaries', dict).click();
+});
+
+Then('its class categories are listed', async ({ window }) => {
+  // Selecting a dictionary cascades into the Class Categories pane.
+  const sb = new StageBrowser(window);
+  await sb.openPane('Class Categories');
+  await expect(sb.pane('Class Categories').getByRole('treeitem').first())
+    .toBeVisible({ timeout: 30_000 });
+});

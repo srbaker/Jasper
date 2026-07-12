@@ -17,3 +17,9 @@ Feature: The Stage Browser
     Given I am logged in to the test stone
     When I find the "Array" class in the browser
     Then the hierarchy shows "Object" above "Array"
+
+  @stone
+  Scenario: Browsing a dictionary's class categories
+    Given I am logged in to the test stone
+    When I select the "Globals" dictionary
+    Then its class categories are listed
