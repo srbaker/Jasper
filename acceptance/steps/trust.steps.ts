@@ -25,5 +25,9 @@ When('I trust the authors', async ({ window }) => {
 });
 
 Then('the workspace is trusted', async ({ window }) => {
-  await expect(new WorkspaceTrust(window).dialog).toBeHidden();
+  // The dialog closing isn't enough — dismissing on "No" also closes it. The
+  // workspace is trusted only when the Restricted Mode indicator is gone.
+  const trust = new WorkspaceTrust(window);
+  await expect(trust.dialog).toBeHidden();
+  await expect(trust.restrictedMode).toHaveCount(0, { timeout: 15_000 });
 });
