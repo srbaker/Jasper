@@ -173,25 +173,56 @@
     return versions.filter((v) => v.extracted || v.local).length;
   }
 
+  // Numeric per-segment version compare ("3.7.10" > "3.7.5"). Plain JS — the
+  // webview can't import the TS comparator.
+  function compareVersions(a, b) {
+    const pa = String(a).split('.').map(Number);
+    const pb = String(b).split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  }
+
+  function versionRow(v) {
+    const state = versionState(v);
+    const sub = [];
+    if (v.size) sub.push(formatBytes(v.size));
+    if (v.date) sub.push(esc(v.date));
+    if (v.bundled) sub.push('bundled GCI');
+    return `<div class="row">
+      <div class="row-main">
+        <div class="row-title"><span class="row-name mono">${esc(v.version)}</span>${pill(state)}</div>
+        ${sub.length ? `<div class="row-sub">${sub.map((s) => `<span>${s}</span>`).join('')}</div>` : ''}
+      </div>
+      <div class="row-actions">${versionActions(v)}</div>
+    </div>`;
+  }
+
   function renderVersions(versions, open) {
-    const rows = versions.length
-      ? versions
-          .map((v) => {
-            const state = versionState(v);
-            const sub = [];
-            if (v.size) sub.push(formatBytes(v.size));
-            if (v.date) sub.push(esc(v.date));
-            if (v.bundled) sub.push('bundled GCI');
-            return `<div class="row">
-              <div class="row-main">
-                <div class="row-title"><span class="row-name mono">${esc(v.version)}</span>${pill(state)}</div>
-                ${sub.length ? `<div class="row-sub">${sub.map((s) => `<span>${s}</span>`).join('')}</div>` : ''}
-              </div>
-              <div class="row-actions">${versionActions(v)}</div>
-            </div>`;
-          })
-          .join('')
+    // Keep the list short: show everything installed/downloaded/local plus the
+    // single latest available release, and tuck the rest of the (uninstalled)
+    // available versions into a collapsed disclosure. The body scrolls, so a long
+    // download catalog never pushes the Databases section off-screen.
+    const available = versions.filter((v) => versionState(v) === 'available');
+    const latest = available.reduce(
+      (best, v) => (best && compareVersions(best.version, v.version) >= 0 ? best : v),
+      null,
+    );
+    const shown = versions.filter((v) => versionState(v) !== 'available' || v === latest);
+    const more = available.filter((v) => v !== latest);
+
+    const body = versions.length
+      ? shown.map(versionRow).join('') +
+        (more.length
+          ? `<details class="more-versions">
+               <summary>${more.length} more version${more.length === 1 ? '' : 's'} available to download</summary>
+               <div class="more-versions-body">${more.map(versionRow).join('')}</div>
+             </details>`
+          : '')
       : `<div class="empty">No GemStone versions found. Download one or register a local build.</div>`;
+
     const installed = versionsInstalledCount(versions);
     return `<details class="section"${openAttr(open)}>
       <summary>
@@ -200,7 +231,7 @@
         <span class="count-badge">${installed} installed</span>
         <span class="section-head-actions">${btn('registerLocalVersion', 'Register Local…', 'plus', 'btn-ghost')}</span>
       </summary>
-      <div class="section-body">${rows}</div>
+      <div class="section-body versions-body">${body}</div>
     </details>`;
   }
 

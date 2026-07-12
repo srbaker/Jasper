@@ -543,6 +543,22 @@ body {
 }
 .section-head-actions { margin-left: auto; display: flex; gap: 6px; }
 .section-body { padding: 6px 14px 12px; }
+/* Versions can be a long download catalog — cap the height and scroll, so it
+   never pushes the Databases section off-screen. */
+.versions-body { max-height: 340px; overflow-y: auto; }
+.more-versions { margin-top: 4px; }
+.more-versions > summary {
+  cursor: pointer; user-select: none; list-style: none;
+  padding: 6px 2px; font-size: 12px;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+}
+.more-versions > summary::-webkit-details-marker { display: none; }
+.more-versions > summary::before {
+  content: ""; display: inline-block; width: 0; height: 0; margin-right: 8px;
+  border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .12s ease; opacity: .7;
+}
+.more-versions[open] > summary::before { transform: rotate(90deg); }
 
 /* Buttons */
 .btn {
