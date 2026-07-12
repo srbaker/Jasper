@@ -51,6 +51,8 @@ const manual = generateManual({
   screensUrlBase: '/screens',
   outline,
   sidebarPath: path.join(packageRoot, 'src', 'generated', 'sidebar.json'),
+  // Hand-written pages the outline can place (Feature name → page link).
+  authoredPages: { Glossary: '/glossary/' },
 });
 
 // Stamp the clock here (the engine is deterministic/clock-free) and write the

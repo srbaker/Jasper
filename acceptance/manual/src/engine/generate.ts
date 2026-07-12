@@ -198,6 +198,8 @@ export interface GenerateManualOptions {
   outline?: ManualSection[];
   /** File to write the generated Starlight sidebar JSON to (needs `outline`). */
   sidebarPath?: string;
+  /** Chapter name → authored page link, so the outline can place hand-written pages. */
+  authoredPages?: Record<string, string>;
 }
 
 function readReport(reportPath: string): CucumberReport {
@@ -257,10 +259,16 @@ type SidebarEntry = SidebarLink | SidebarGroup;
 /**
  * Build the Starlight sidebar from the outline and the features that actually
  * generated. Chapters render in outline order under their section; a listed
- * chapter with no generated page is skipped; a generated chapter absent from the
- * outline lands under a trailing "More" group so nothing is lost.
+ * chapter with no generated page (and no authored page) is skipped; a generated
+ * chapter absent from the outline lands under a trailing "More" group so nothing
+ * is lost. `authoredPages` maps chapter names to hand-written page links (e.g.
+ * the Glossary), so the outline can place authored pages alongside generated ones.
  */
-function buildSidebar(features: ManualFeature[], outline: ManualSection[]): SidebarEntry[] {
+function buildSidebar(
+  features: ManualFeature[],
+  outline: ManualSection[],
+  authoredPages: Record<string, string> = {},
+): SidebarEntry[] {
   const bySlugForName = new Map(features.map((f) => [f.name, f.slug]));
   const placed = new Set<string>();
 
@@ -269,9 +277,12 @@ function buildSidebar(features: ManualFeature[], outline: ManualSection[]): Side
     const items: SidebarLink[] = [];
     for (const name of section.chapters) {
       const slug = bySlugForName.get(name);
-      if (!slug || placed.has(slug)) continue;
-      placed.add(slug);
-      items.push({ label: name, link: `/features/${slug}/` });
+      if (slug && !placed.has(slug)) {
+        placed.add(slug);
+        items.push({ label: name, link: `/features/${slug}/` });
+      } else if (authoredPages[name]) {
+        items.push({ label: name, link: authoredPages[name] });
+      }
     }
     if (items.length) sections.push({ label: section.title, items });
   }
@@ -341,7 +352,7 @@ export function generateManual(options: GenerateManualOptions): Manual {
     fs.mkdirSync(path.dirname(options.sidebarPath), { recursive: true });
     fs.writeFileSync(
       options.sidebarPath,
-      JSON.stringify(buildSidebar(manual.features, options.outline), null, 2),
+      JSON.stringify(buildSidebar(manual.features, options.outline, options.authoredPages), null, 2),
     );
   }
 
