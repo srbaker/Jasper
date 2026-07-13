@@ -54,8 +54,9 @@ Then('WebGS appears under Loaded Projects', async ({ window }) => {
 
 When('I open the Web Apps view', async ({ window }) => {
   const webApps = new WebAppsView(window);
-  // The activity-bar icon exists only because WebGS is loaded — that's the gating.
-  await expect(webApps.icon).toBeVisible({ timeout: 30_000 });
+  // The Web Apps section appears in the GemStone sidebar only because WebGS is
+  // loaded — that's the gating.
+  await expect(webApps.section).toBeVisible({ timeout: 30_000 });
   await webApps.open();
 });
 

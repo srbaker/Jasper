@@ -334,27 +334,20 @@
           "id": "gemstone",
           "title": "GemStone",
           "icon": "resources/gemstone-sidebar.png"
-        },
-        {
-          "id": "gemstoneWebApps",
-          "title": "Web Apps",
-          "icon": "$(globe)"
         }
       ]
     },
     "views": {
-      "gemstoneWebApps": [
-        {
-          "id": "gemstoneWebApps",
-          "name": "Web Apps",
-          "when": "gemstone.webgsAvailable"
-        }
-      ],
       "gemstone": [
         {
           "id": "gemstoneLoginLauncher",
           "name": "Sessions",
           "type": "webview"
+        },
+        {
+          "id": "gemstoneWebApps",
+          "name": "Web Apps",
+          "when": "gemstone.webgsAvailable"
         },
         {
           "id": "gemstoneRowan",
