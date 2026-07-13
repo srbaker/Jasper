@@ -346,7 +346,8 @@
       "gemstoneWebApps": [
         {
           "id": "gemstoneWebApps",
-          "name": "Web Apps"
+          "name": "Web Apps",
+          "when": "gemstone.webgsAvailable"
         }
       ],
       "gemstone": [

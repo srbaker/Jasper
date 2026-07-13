@@ -405,6 +405,8 @@ async function loadRowanFromDirectory(
   // The load committed on the same-user loader session; refresh the working
   // session's view so the new project becomes visible here.
   await refreshWorkingSession(session, sessionManager, `Rowan project "${result.detail}" loaded.`);
+  // Loading may have brought WebGS into the image — re-evaluate the Web Apps view.
+  void vscode.commands.executeCommand('gemstone.webgsRefreshContext');
 }
 
 // Write a loaded Rowan project's image state back to its own on-disk Tonel
@@ -562,8 +564,25 @@ export function activate(context: vscode.ExtensionContext) {
   // Runs WebGS servers (a dedicated serving Gem per app). Stopped on deactivate.
   const webgsServer = new WebGsServer();
   context.subscriptions.push({ dispose: () => webgsServer.stopAll() });
-  // The "Web Apps" view — WebApp subclasses + their serving state.
+  // The "Web Apps" view — WebApp subclasses + their serving state. Its container
+  // is hidden unless WebGS is loaded (the WebApp class is present): the view's
+  // `when: gemstone.webgsAvailable` gates it, and an empty container hides its
+  // activity-bar icon. Keep that context key in sync with the connected image.
   const webAppsProvider = new WebAppsProvider(sessionManager, webgsServer);
+  const updateWebgsContext = (): void => {
+    const session = sessionManager.getSelectedSession();
+    let available = false;
+    if (session) {
+      try {
+        available = queries.executeFetchString(
+          session, 'webgsLoaded', `(System myUserProfile symbolList objectNamed: #'WebApp') notNil printString`,
+        ).trim() === 'true';
+      } catch { available = false; }
+    }
+    void vscode.commands.executeCommand('setContext', 'gemstone.webgsAvailable', available);
+    webAppsProvider.refresh();
+  };
+  updateWebgsContext();
 
   // Sessions don't survive a window reload, so any gemstone:// method/class tab
   // VS Code restored from the previous window is unservable and shows a broken
@@ -1432,6 +1451,26 @@ export function activate(context: vscode.ExtensionContext) {
       if (choice === 'Open Preview') await openWebPreview(app.url);
     }),
 
+    // Click a route: serve its app if it isn't already, then open the route in
+    // the preview — the Web Apps list works as a live API console.
+    vscode.commands.registerCommand('gemstone.webgsOpenRoute', async (arg?: unknown) => {
+      const info = arg as { appName?: string; path?: string } | undefined;
+      if (!info?.appName || !info.path) return;
+      let url = webgsServer.urlFor(info.appName);
+      if (!url) {
+        const session = await sessionManager.resolveSession();
+        if (!session) return;
+        try {
+          url = webgsServer.start(session, info.appName).url;
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Could not start ${info.appName}: ${e instanceof Error ? e.message : String(e)}`);
+          return;
+        }
+        webAppsProvider.refresh();
+      }
+      await openWebPreview(url.replace(/\/$/, '') + info.path);
+    }),
+
     // Stop a running WebGS server.
     vscode.commands.registerCommand('gemstone.webgsStopServer', async (appArg?: unknown) => {
       let appName = webAppNameOf(appArg);
@@ -1556,6 +1595,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await refreshWorkingSession(session, sessionManager, `Rowan project "${projectName}" unloaded.`);
       void vscode.commands.executeCommand('gemstone.rowanRefreshView');
+      void vscode.commands.executeCommand('gemstone.webgsRefreshContext');
     }),
 
     vscode.commands.registerCommand('gemstone.sessionLogout', async (item?: GemStoneSessionItem) => {
@@ -2573,11 +2613,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.createTreeView('gemstoneRowan', {
       treeDataProvider: rowanProvider,
     }),
-    // Web Apps view (its own container) — refreshes when the session changes.
+    // Web Apps view (its own container) — re-evaluate WebGS availability + rows
+    // when the session changes, and expose an internal refresh other flows call
+    // after loading/unloading a project.
     vscode.window.createTreeView('gemstoneWebApps', {
       treeDataProvider: webAppsProvider,
     }),
-    sessionManager.onDidChangeSelection(() => webAppsProvider.refresh()),
+    sessionManager.onDidChangeSelection(() => updateWebgsContext()),
+    vscode.commands.registerCommand('gemstone.webgsRefreshContext', () => updateWebgsContext()),
     // Git-view-style M/A/D badges + label tinting for Rowan rows.
     vscode.window.registerFileDecorationProvider(new RowanDecorationProvider()),
     // Loaded-projects section tracks the connected stone.
