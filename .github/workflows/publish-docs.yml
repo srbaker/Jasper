@@ -1,0 +1,60 @@
+# Regenerate the living-documentation manual from a headless acceptance run and
+# publish it to GitHub Pages. The manual is the same self-contained HTML produced
+# locally by `npm run test:acceptance:manual` — here the acceptance suite runs
+# headless in Docker (the image bakes in GemStone, so @stone chapters provision a
+# stone in-container) and the HTML is generated on the runner, then deployed.
+#
+# docker-manual.sh tolerates individual scenario failures (`|| true`), so the
+# manual is built from whatever ran — a flaky chapter degrades a page, it doesn't
+# fail the publish.
+name: Publish docs
+
+on:
+  push:
+    branches: ['srbaker/acceptance-living-docs']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One publish at a time; let an in-flight deploy finish rather than cancel it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install manual generator deps
+        run: npm --prefix acceptance/manual ci
+
+      - name: Build the manual (headless acceptance run in Docker)
+        run: npm --prefix acceptance run manual:docker
+
+      - name: Add index.html entry point
+        run: cp acceptance/manual/dist/manual.html acceptance/manual/dist/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: acceptance/manual/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
