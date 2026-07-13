@@ -26,7 +26,18 @@ import { SystemBrowser } from './systemBrowser';
 import { refreshWorkingSession, loginAsWorkingUser } from './systemUserSession';
 import { openWebPreview } from './webPreview';
 import { WebGsServer } from './webgsServer';
+import { WebAppsProvider } from './webAppsView';
 import { listWebApps } from './queries/webgs/listWebApps';
+
+// The app name behind a Run/Stop invocation: a string (programmatic) or the
+// clicked WebAppItem (its `appName`), else undefined (palette → prompt).
+function webAppNameOf(arg: unknown): string | undefined {
+  if (typeof arg === 'string') return arg;
+  if (arg && typeof arg === 'object' && typeof (arg as { appName?: unknown }).appName === 'string') {
+    return (arg as { appName: string }).appName;
+  }
+  return undefined;
+}
 import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl, parseGitRef } from './rowanLoad';
 import { NbCancelledError } from './nbRunner';
 import { RowanRepoRegistry } from './rowanRepos';
@@ -551,6 +562,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Runs WebGS servers (a dedicated serving Gem per app). Stopped on deactivate.
   const webgsServer = new WebGsServer();
   context.subscriptions.push({ dispose: () => webgsServer.stopAll() });
+  // The "Web Apps" view — WebApp subclasses + their serving state.
+  const webAppsProvider = new WebAppsProvider(sessionManager, webgsServer);
 
   // Sessions don't survive a window reload, so any gemstone:// method/class tab
   // VS Code restored from the previous window is unservable and shows a broken
@@ -1379,16 +1392,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Open a running WebGS/Seaside endpoint in an in-editor Simple Browser tab.
     // Takes an optional URL (callers pass an exact endpoint); prompts otherwise.
-    vscode.commands.registerCommand('gemstone.openWebPreview', (url?: unknown) =>
-      openWebPreview(typeof url === 'string' ? url : undefined),
-    ),
+    vscode.commands.registerCommand('gemstone.openWebPreview', (arg?: unknown) => {
+      const url = typeof arg === 'string'
+        ? arg
+        : (arg && typeof arg === 'object' && typeof (arg as { previewUrl?: unknown }).previewUrl === 'string')
+          ? (arg as { previewUrl: string }).previewUrl
+          : undefined;
+      return openWebPreview(url);
+    }),
 
     // Run a WebApp subclass as a web server on a dedicated serving Gem, then offer
     // to open it in the preview. `appArg` (a class name) skips the picker.
     vscode.commands.registerCommand('gemstone.webgsRunServer', async (appArg?: unknown) => {
       const session = await sessionManager.resolveSession();
       if (!session) return;
-      let appName = typeof appArg === 'string' ? appArg : undefined;
+      let appName = webAppNameOf(appArg);
       if (!appName) {
         const apps = listWebApps((label, code) => queries.executeFetchString(session, label, code));
         if (apps.length === 0) {
@@ -1407,6 +1425,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Could not start ${appName}: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
+      webAppsProvider.refresh();
       const choice = await vscode.window.showInformationMessage(
         `${appName} is serving at ${app.url}`, 'Open Preview',
       );
@@ -1415,7 +1434,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Stop a running WebGS server.
     vscode.commands.registerCommand('gemstone.webgsStopServer', async (appArg?: unknown) => {
-      let appName = typeof appArg === 'string' ? appArg : undefined;
+      let appName = webAppNameOf(appArg);
       if (!appName) {
         const running = webgsServer.runningApps().map((a) => a.appName);
         if (running.length === 0) {
@@ -1428,6 +1447,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (!appName) return;
       webgsServer.stop(appName);
+      webAppsProvider.refresh();
       vscode.window.showInformationMessage(`Stopped ${appName}.`);
     }),
 
@@ -2553,6 +2573,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.createTreeView('gemstoneRowan', {
       treeDataProvider: rowanProvider,
     }),
+    // Web Apps view (its own container) — refreshes when the session changes.
+    vscode.window.createTreeView('gemstoneWebApps', {
+      treeDataProvider: webAppsProvider,
+    }),
+    sessionManager.onDidChangeSelection(() => webAppsProvider.refresh()),
     // Git-view-style M/A/D badges + label tinting for Rowan rows.
     vscode.window.registerFileDecorationProvider(new RowanDecorationProvider()),
     // Loaded-projects section tracks the connected stone.

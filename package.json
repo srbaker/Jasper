@@ -334,10 +334,21 @@
           "id": "gemstone",
           "title": "GemStone",
           "icon": "resources/gemstone-sidebar.png"
+        },
+        {
+          "id": "gemstoneWebApps",
+          "title": "Web Apps",
+          "icon": "$(globe)"
         }
       ]
     },
     "views": {
+      "gemstoneWebApps": [
+        {
+          "id": "gemstoneWebApps",
+          "name": "Web Apps"
+        }
+      ],
       "gemstone": [
         {
           "id": "gemstoneLoginLauncher",
@@ -414,6 +425,10 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "gemstoneWebApps",
+        "contents": "Web apps appear here once a WebApp subclass is loaded in a connected session.\nWebGS is a framework for HTTP back-ends in GemStone Smalltalk — subclass WebApp and each method becomes an endpoint."
+      },
       {
         "view": "gemstoneRowan",
         "contents": "Not connected.",
@@ -1486,6 +1501,21 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "gemstone.webgsRunServer",
+          "when": "view == gemstoneWebApps && viewItem == webAppStopped",
+          "group": "inline@0"
+        },
+        {
+          "command": "gemstone.openWebPreview",
+          "when": "view == gemstoneWebApps && viewItem == webAppRunning",
+          "group": "inline@0"
+        },
+        {
+          "command": "gemstone.webgsStopServer",
+          "when": "view == gemstoneWebApps && viewItem == webAppRunning",
+          "group": "inline@1"
+        },
         {
           "command": "gemstone.stageBrowser.openMethodToSide",
           "when": "view == gemstoneStageMethods && viewItem =~ /^stageMethod/",
