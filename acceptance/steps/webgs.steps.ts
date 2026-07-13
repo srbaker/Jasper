@@ -8,28 +8,36 @@
  * real, mouse-driven action a user takes.
  */
 import { createBdd } from 'playwright-bdd';
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { test } from '../fixtures/test';
 import { RowanView } from '../pageobjects/rowanView';
+import { WebAppsView } from '../pageobjects/webAppsView';
 
-const { When, Then } = createBdd(test);
+const { Given, When, Then } = createBdd(test);
 
 const WEBGS_GIT = 'https://github.com/srbaker/WebGS.git#rowanize';
 
-When('I clone and load WebGS from GitHub', async ({ window }) => {
+// Clone WebGS from GitHub and load a spec into the image, accepting the post-load
+// "refresh this session" prompt. `specPattern` chooses the spec — the framework
+// core (WebGS.ston) or the examples (WebGS-Examples.ston, which brings Sample).
+async function cloneAndLoad(window: Page, specPattern: RegExp): Promise<void> {
   const rowan = new RowanView(window);
   await rowan.open();
   await rowan.addRepoFromGit(WEBGS_GIT);
-  // The clone runs (network), then WebGS lands under Repositories — wait for it.
   await rowan.expand('Repositories');
   await expect(rowan.row(/WebGS/).first()).toBeVisible({ timeout: 120_000 });
-  // WebGS ships two specs; load the framework core (WebGS.ston, not -Examples).
-  await rowan.loadIntoImage(/WebGS/, /WebGS\.ston/);
-  // The load commits on a separate loader session, then Jasper offers to refresh
-  // this session so the new project becomes visible — accept it.
+  await rowan.loadIntoImage(/WebGS/, specPattern);
   const refresh = window.locator('.notifications-toasts').getByRole('button', { name: 'Refresh', exact: true });
   await expect(refresh).toBeVisible({ timeout: 120_000 });
   await refresh.click();
+}
+
+When('I clone and load WebGS from GitHub', async ({ window }) => {
+  await cloneAndLoad(window, /WebGS\.ston/);
+});
+
+Given('I have loaded the WebGS examples', async ({ window }) => {
+  await cloneAndLoad(window, /WebGS-Examples\.ston/);
 });
 
 Then('WebGS appears under Loaded Projects', async ({ window }) => {
@@ -42,4 +50,18 @@ Then('WebGS appears under Loaded Projects', async ({ window }) => {
     await rowan.expand('Loaded Projects');
     await expect(rowan.row(/WebGS/)).toHaveCount(2, { timeout: 2_000 });
   }).toPass({ timeout: 60_000, intervals: [2_000, 3_000] });
+});
+
+When('I open the Web Apps view', async ({ window }) => {
+  const webApps = new WebAppsView(window);
+  // The activity-bar icon exists only because WebGS is loaded — that's the gating.
+  await expect(webApps.icon).toBeVisible({ timeout: 30_000 });
+  await webApps.open();
+});
+
+Then('the Sample app lists its counter.gs endpoint', async ({ window }) => {
+  const webApps = new WebAppsView(window);
+  await expect(webApps.row(/Sample/).first()).toBeVisible({ timeout: 30_000 });
+  await webApps.expand(/Sample/);
+  await expect(webApps.row(/\/counter\.gs/).first()).toBeVisible({ timeout: 30_000 });
 });

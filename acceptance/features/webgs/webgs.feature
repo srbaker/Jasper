@@ -11,3 +11,10 @@ Feature: Building a web app with WebGS and Rowan
     Given I am logged in to the test stone
     When I clone and load WebGS from GitHub
     Then WebGS appears under Loaded Projects
+
+  @stone
+  Scenario: The Web Apps view lists your endpoints
+    Given I am logged in to the test stone
+    And I have loaded the WebGS examples
+    When I open the Web Apps view
+    Then the Sample app lists its counter.gs endpoint
