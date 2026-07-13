@@ -749,6 +749,18 @@
         "icon": "$(globe)"
       },
       {
+        "command": "gemstone.webgsRunServer",
+        "title": "Run as Web Server",
+        "category": "GemStone",
+        "icon": "$(play)"
+      },
+      {
+        "command": "gemstone.webgsStopServer",
+        "title": "Stop Web Server",
+        "category": "GemStone",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "gemstone.rowanAddRepo",
         "title": "Add Rowan Repository…",
         "category": "GemStone",

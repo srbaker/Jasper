@@ -25,6 +25,8 @@ import { CodeExecutor } from './codeExecutor';
 import { SystemBrowser } from './systemBrowser';
 import { refreshWorkingSession, loginAsWorkingUser } from './systemUserSession';
 import { openWebPreview } from './webPreview';
+import { WebGsServer } from './webgsServer';
+import { listWebApps } from './queries/webgs/listWebApps';
 import { findRowanLoadSpecs, deriveRepoName, cloneGitRepo, normalizeGitUrl, parseGitRef } from './rowanLoad';
 import { NbCancelledError } from './nbRunner';
 import { RowanRepoRegistry } from './rowanRepos';
@@ -545,6 +547,10 @@ export function activate(context: vscode.ExtensionContext) {
   // SessionManager is created early so the Logins panel can mark the connected
   // login row (and swap its inline Login action for Logout) in single-session mode.
   sessionManager = new SessionManager();
+
+  // Runs WebGS servers (a dedicated serving Gem per app). Stopped on deactivate.
+  const webgsServer = new WebGsServer();
+  context.subscriptions.push({ dispose: () => webgsServer.stopAll() });
 
   // Sessions don't survive a window reload, so any gemstone:// method/class tab
   // VS Code restored from the previous window is unservable and shows a broken
@@ -1376,6 +1382,54 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('gemstone.openWebPreview', (url?: unknown) =>
       openWebPreview(typeof url === 'string' ? url : undefined),
     ),
+
+    // Run a WebApp subclass as a web server on a dedicated serving Gem, then offer
+    // to open it in the preview. `appArg` (a class name) skips the picker.
+    vscode.commands.registerCommand('gemstone.webgsRunServer', async (appArg?: unknown) => {
+      const session = await sessionManager.resolveSession();
+      if (!session) return;
+      let appName = typeof appArg === 'string' ? appArg : undefined;
+      if (!appName) {
+        const apps = listWebApps((label, code) => queries.executeFetchString(session, label, code));
+        if (apps.length === 0) {
+          vscode.window.showInformationMessage('No WebApp subclasses found — load a WebGS app first.');
+          return;
+        }
+        appName = apps.length === 1
+          ? apps[0]
+          : await vscode.window.showQuickPick(apps, { placeHolder: 'Run which web app?' });
+      }
+      if (!appName) return;
+      let app;
+      try {
+        app = webgsServer.start(session, appName);
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(`Could not start ${appName}: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      const choice = await vscode.window.showInformationMessage(
+        `${appName} is serving at ${app.url}`, 'Open Preview',
+      );
+      if (choice === 'Open Preview') await openWebPreview(app.url);
+    }),
+
+    // Stop a running WebGS server.
+    vscode.commands.registerCommand('gemstone.webgsStopServer', async (appArg?: unknown) => {
+      let appName = typeof appArg === 'string' ? appArg : undefined;
+      if (!appName) {
+        const running = webgsServer.runningApps().map((a) => a.appName);
+        if (running.length === 0) {
+          vscode.window.showInformationMessage('No WebGS server is running.');
+          return;
+        }
+        appName = running.length === 1
+          ? running[0]
+          : await vscode.window.showQuickPick(running, { placeHolder: 'Stop which web app?' });
+      }
+      if (!appName) return;
+      webgsServer.stop(appName);
+      vscode.window.showInformationMessage(`Stopped ${appName}.`);
+    }),
 
     vscode.commands.registerCommand('gemstone.rowanFindClassPackage', async () => {
       const session = await sessionManager.resolveSession();
